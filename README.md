@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/logo.jpg" alt="Ghosty Input Logo" width="140"/>
+<img src="assets/logo.png" alt="Ghosty Input Logo" width="140"/>
 
 # Ghosty Input
 
