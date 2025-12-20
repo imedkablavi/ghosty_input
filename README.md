@@ -78,10 +78,6 @@ Local, offline hand-tracking system for mouse control and desk-based typing usin
   <img src="assets/screenshots/dashboard.png" width="100%"/>
 </div>
 
-### Desk Plane Calibration
-<div align="center">
-  <img src="assets/screenshots/calibration.png" width="100%"/>
-</div>
 
 ### Virtual Keyboard Overlay
 <div align="center">
@@ -119,7 +115,7 @@ source .venv/bin/activate   # Windows: .\.venv\Scripts\activate
 pip install -r requirements.txt
 python run.py
 Python 3.10 or 3.11 is required.
-
+```
 Camera Modes
 Single camera: one shared stream for mouse and keyboard
 
@@ -148,3 +144,9 @@ Ghosty Input works fully offline.
 No camera data or user input is transmitted or collected.
 
 See PRIVACY.md
+
+
+  ## 💰 You can help me by Donating
+  [![BuyMeACoffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/imed_kablavi) 
+
+
