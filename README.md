@@ -9,8 +9,8 @@
 Local, offline hand-tracking system for mouse control and desk-based typing using computer vision.
 
 [Website](https://imedkablavi.info) ·
-[Releases](https://github.com/ghosty_input/releases) ·
-[Issues](https://github.com/ghosty_input/issues) ·
+[Releases](https://github.com/imedkablavi/ghosty_input//releases) ·
+[Issues](https://github.com/imedkablavi/ghosty_input/issues) ·
 [Documentation](docs/)
 
 <br/>
@@ -91,7 +91,7 @@ This option does not require Python or development tools.
 Clone the repository and run from source:
 
 ```bash
-git clone https://github.com/YOUR_REPO.git
+git clone https://github.com/imedkablavi/ghosty_input.git
 cd GhostyInput
 python -m venv .venv
 source .venv/bin/activate   # Windows: .\.venv\Scripts\activate
