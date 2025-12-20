@@ -59,7 +59,7 @@ Local, offline hand-tracking system for mouse control and desk-based typing usin
 ## Gesture Guide
 
 <div align="center">
-  <img src="assets/screenshots/gesture-guide.png"
+  <img src="assets/screenshots/gesture-guide.jpg"
        alt="Ghosty Input Gesture Guide"
        width="100%"/>
 </div>
