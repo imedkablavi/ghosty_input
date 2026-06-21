@@ -1,152 +1,60 @@
-<div align="center">
-
-<img src="assets/logo.png" alt="Ghosty Input Logo" width="140"/>
-
 # Ghosty Input
 
-**Hand-gesture mouse control and desk-surface virtual keyboard**
-
-Local, offline hand-tracking system for mouse control and desk-based typing using computer vision.
-
-[Website](https://imedkablavi.info) ·
-[Releases](https://github.com/imedkablavi/ghosty_input/releases) ·
-[Issues](https://github.com/imedkablavi/ghosty_input/issues) ·
-[Docs](docs/)
-
-<br/>
-
-<img src="https://img.shields.io/github/v/release/imedkablavi/ghosty_input?label=release"/>
-<img src="https://img.shields.io/github/license/imedkablavi/ghosty_input"/>
-<img src="https://img.shields.io/github/issues/imedkablavi/ghosty_input"/>
-<img src="https://img.shields.io/github/stars/imedkablavi/ghosty_input"/>
-<img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey"/>
-<img src="https://img.shields.io/badge/python-3.10%20%7C%203.11-blue"/>
-
-<br/><br/>
-
-**Language**  
-[English](README.md) · [العربية](README.ar.md) · [Türkçe](README.tr.md)
-
-</div>
-
----
-
-## Overview
-
-**Ghosty Input** is a desktop application that allows users to control the mouse and type on a desk-surface virtual keyboard using hand gestures.
-
-- Front camera controls the mouse  
-- Top-down camera maps a physical desk keyboard  
-- One-camera or two-camera setups are supported  
-- All processing runs locally (offline)
-
----
+Hand-gesture mouse control and desk-surface virtual keyboard using computer vision.
 
 ## Features
 
-- Dual-camera architecture  
-  - Front camera → mouse control  
-  - Top camera → desk keyboard
-- Automatic single-camera fallback (shared stream)
-- Desk-plane calibration using four corner points
-- Gesture-based mouse interaction (move, click, drag, scroll, pause)
-- Desk-surface virtual keyboard with optional overlay
-- Left-hand modifier gestures (Space, Backspace, Shift, Enter)
-- Local profiles and configuration
+- Repository structure has been documented from the currently tracked files.
 
----
+## Tech Stack
 
-## Gesture Guide
+- Project files detected from repository contents
 
-<div align="center">
-  <img src="assets/screenshots/gesture-guide.jpg"
-       alt="Ghosty Input Gesture Guide"
-       width="100%"/>
-</div>
+## Project Structure
 
-**Notes**
-- Front camera is used for mouse control
-- Top-down camera is used for desk-surface keyboard input
-- Keyboard typing requires desk-plane calibration (4 points)
-
----
-
-## Screenshots
-
-### Main Dashboard
-<div align="center">
-  <img src="assets/screenshots/dashboard.png" width="100%"/>
-</div>
-
-
-### Virtual Keyboard Overlay
-<div align="center">
-  <img src="assets/screenshots/keyboard-overlay.png" width="100%"/>
-</div>
-
----
+```text
+.gitignore
+assets/
+README.ar.md
+README.md
+```
 
 ## Installation
 
-### For Regular Users (Recommended)
-
-#### Windows Installer
-1. Open the **Releases** page
-2. Download **GhostyInputSetup.exe**
-3. Install and launch the application
-
-No Python or development tools are required.
-
-#### Windows Portable
-- Download the portable ZIP
-- Extract and run `GhostyInput.exe`
-
----
-
-### For Developers
-
-Clone the repository and run from source:
-
 ```bash
-git clone https://github.com/imedkablavi/ghosty_input.git
-cd ghosty_input
-python -m venv .venv
-source .venv/bin/activate   # Windows: .\.venv\Scripts\activate
-pip install -r requirements.txt
-python run.py
-Python 3.10 or 3.11 is required.
+No dependency installation command was detected.
 ```
-Camera Modes
-Single camera: one shared stream for mouse and keyboard
 
-Two cameras: front camera for mouse, top camera for keyboard
+## Development
 
-If only one camera preview is visible, this is expected behavior.
+- No development command was detected from tracked files.
 
-Profiles & Logs
-User data is stored outside the installation directory.
+## Build
 
-Windows: %APPDATA%\GhostyInput
+No build command was detected from tracked files.
 
-Linux: ~/.local/share/GhostyInput
+## Tests
 
-Troubleshooting
-Black camera preview: camera ID may be incorrect or blocked by OS privacy settings
+No test command was detected from tracked files.
 
-Second camera preview hidden: expected in single-camera mode
+## Environment Variables
 
-Keyboard not typing: desk-plane calibration is required
+Use `.env.example` as the starting point when environment variables are required. Keep real secrets out of git.
 
-MediaPipe errors: use Python 3.10 or 3.11 only
+- No required environment variables were detected from tracked files.
 
-Privacy
-Ghosty Input works fully offline.
-No camera data or user input is transmitted or collected.
+## Status
 
-See PRIVACY.md
+- README generated from the current repository files.
+- Runtime behavior should be verified in the target environment before production use.
 
+## Roadmap / TODO
 
-  ## 💰 You can help me by Donating
-  [![BuyMeACoffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/imed_kablavi) 
+- Keep this README aligned with future code changes.
+- Add setup notes for deployment environments when they are finalized.
+- Add or expand automated tests when project behavior is stable.
 
+## Author
 
+Author: iEmmAd / cybrex  
+GitHub: [imedkablavi](https://github.com/imedkablavi)
