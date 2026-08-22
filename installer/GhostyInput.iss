@@ -1,5 +1,5 @@
 #define MyAppName "Ghosty Input"
-#define MyAppVersion "0.3.0"
+#define MyAppVersion "0.5.1"
 #define MyAppPublisher "iEmmAd / cybrex"
 #define MyAppExeName "GhostyInput.exe"
 

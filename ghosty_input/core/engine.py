@@ -57,8 +57,13 @@ class GhostyEngine:
             fps=config.camera_fps,
             autofocus=config.camera_autofocus,
             exposure=config.camera_exposure,
+            reconnect_interval=config.camera_reconnect_ms / 1000.0,
         )
-        self.front = Camera(config.front_camera, **camera_args)
+        self.front = Camera(
+            config.front_camera,
+            device_id=config.front_camera_id,
+            **camera_args,
+        )
         self.top: Camera | None = None
         self.front_tracker = HandTracker(
             max_hands=2,
@@ -111,15 +116,29 @@ class GhostyEngine:
 
     def start(self) -> None:
         self.front.open()
-        if self.config.dual_camera and self.config.top_camera != self.config.front_camera:
+        same_persistent_camera = (
+            bool(self.config.front_camera_id)
+            and self.config.front_camera_id == self.config.top_camera_id
+        )
+        same_numeric_camera = (
+            not self.config.front_camera_id
+            and not self.config.top_camera_id
+            and self.config.top_camera == self.config.front_camera
+        )
+        if self.config.dual_camera and not (same_persistent_camera or same_numeric_camera):
             camera_args = dict(
                 width=self.config.camera_width,
                 height=self.config.camera_height,
                 fps=self.config.camera_fps,
-                autofocus=self.config.camera_autofocus,
+                autofocus=self.config.top_camera_autofocus,
                 exposure=self.config.camera_exposure,
+                reconnect_interval=self.config.camera_reconnect_ms / 1000.0,
             )
-            self.top = Camera(self.config.top_camera, **camera_args)
+            self.top = Camera(
+                self.config.top_camera,
+                device_id=self.config.top_camera_id,
+                **camera_args,
+            )
             self.top.open()
             self.top_tracker = HandTracker(
                 max_hands=2,
@@ -327,22 +346,11 @@ class GhostyEngine:
             status = "Paused" if self.paused else "Running"
             if self.config.keyboard_enabled and not self.calibration.ready:
                 status += " · keyboard needs calibration"
-            return TickResult(
-                front_frame,
-                top_frame,
-                status,
-                event,
-                self._metrics(front_hands),
-            )
+            return TickResult(front_frame, top_frame, status, event, self._metrics(front_hands))
         except CameraError as exc:
             return TickResult(None, None, "Camera error", str(exc))
         except Exception as exc:
-            return TickResult(
-                None,
-                None,
-                "Runtime error",
-                f"{type(exc).__name__}: {exc}",
-            )
+            return TickResult(None, None, "Runtime error", f"{type(exc).__name__}: {exc}")
 
     def close(self) -> None:
         self.input.close()

@@ -27,13 +27,17 @@ def app_data_dir() -> Path:
 class AppConfig:
     front_camera: int = 0
     top_camera: int = 1
+    front_camera_id: str = ""
+    top_camera_id: str = ""
     dual_camera: bool = False
 
     camera_width: int = 1920
     camera_height: int = 1080
     camera_fps: int = 30
     camera_autofocus: bool = True
+    top_camera_autofocus: bool = False
     camera_exposure: float | None = None
+    camera_reconnect_ms: int = 900
 
     keyboard_enabled: bool = True
     mirror_front: bool = True
@@ -45,6 +49,8 @@ class AppConfig:
     input_backend: str = "auto"
     screen_width: int = 0
     screen_height: int = 0
+    linux_close_to_tray: bool = False
+    linux_start_minimized: bool = False
 
     pointer_smoothing: float = 0.28
     pointer_deadzone_px: float = 1.5
@@ -66,6 +72,7 @@ class AppConfig:
 
     calibration_points: list[list[float]] = field(default_factory=list)
 
+    # Compatibility with v0.2 config files. New code uses pointer_smoothing.
     smoothing: float | None = None
     pinch_threshold: float | None = None
 
@@ -81,6 +88,8 @@ class AppConfig:
             raise ValueError("Camera resolution must be at least 640x480.")
         if not 15 <= self.camera_fps <= 120:
             raise ValueError("Camera FPS must be between 15 and 120.")
+        if not 250 <= self.camera_reconnect_ms <= 10000:
+            raise ValueError("Camera reconnect interval must be between 250 and 10000 ms.")
         if not 0.3 <= self.detection_confidence <= 0.95:
             raise ValueError("Detection confidence must be between 0.3 and 0.95.")
         if not 0.3 <= self.tracking_confidence <= 0.95:

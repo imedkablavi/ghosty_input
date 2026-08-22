@@ -1,49 +1,60 @@
 # Changelog
 
-## 0.4.0
+## 0.5.1 - Linux camera reliability hotfix
 
-### Linux input
-- Add a native Linux `uinput` keyboard/mouse backend through python-evdev.
-- Auto-select `uinput` when the current user has access and keep PyAutoGUI as a fallback.
-- Add Wayland/X11 session diagnostics and an explicit backend selector.
-- Add a least-privilege Linux setup helper using a dedicated `ghosty-input` group and udev rule.
+### Camera discovery
+- Added direct `/dev/video*` discovery when `/sys/class/video4linux` is unavailable or incomplete.
+- Added native `VIDIOC_QUERYCAP` inspection without requiring `v4l-utils`.
+- Filters V4L2 metadata/output-only nodes from the user camera selector while keeping them visible in diagnostics.
+- Uses the V4L2 `card`, driver, and bus information when sysfs does not provide a friendly camera name.
+- Keeps unknown/permission-blocked nodes visible instead of silently dropping them.
 
-### Interaction engine
-- Add hands-free hover/dwell activation for pointer left-click and desk-keyboard input.
-- Re-arm dwell actions only after the pointer/key target is left, preventing repeated clicks or characters.
-- Keep normalized pinch, hysteresis, temporal hand stabilization, and One Euro pointer filtering.
+### Camera opening
+- Verifies a real frame during camera open instead of treating `VideoCapture.isOpened()` as sufficient.
+- Adds adaptive capture negotiation: requested resolution, then 1280×720, then 640×480.
+- On Linux, tries MJPG and the camera's default pixel format before falling back from V4L2 to OpenCV auto-selection.
+- Keeps the first validated frame so startup verification does not discard a good frame.
 
-### Cameras and diagnostics
-- Discover Linux cameras from `/sys/class/video4linux` with human-readable device names.
-- Add `ghosty-input --diagnose` for session, camera, and input-backend health checks.
-- Show the active OS input backend in live runtime metrics.
+### Diagnostics and packaging
+- Added `--camera-diagnose` (Camera Doctor) to report V4L2 capability, access, driver, bus, backend, negotiated resolution, FPS, and real-frame probe result.
+- Expanded `--diagnose` with capture/non-capture/unknown V4L2 counts and OpenCV video backends.
+- Linux source, packaged binary, and extracted `.deb` now run Camera Doctor as a packaging gate.
+- Linux packaging now uses a single release-version variable to keep archive, Debian metadata, and artifact names consistent.
+
+## 0.5.0 - Linux commercial track
+
+### Linux runtime
+- Added persistent V4L camera identities using `/dev/v4l/by-id` with `by-path` fallback.
+- Added automatic camera reconnect with persistent-ID re-resolution after USB re-enumeration.
+- Added separate autofocus settings for front and desk cameras.
+- Hardened Auto input backend fallback when native uinput creation fails.
+- Expanded Linux diagnostics with distribution, kernel, camera permissions, persistent IDs, desktop launcher state, and autostart state.
+
+### Linux desktop
+- Added an optional system tray with Show, Start/Stop Engine, and Quit actions.
+- Added optional close-to-tray behavior; disabled by default.
+- Added per-user application-menu integration without root.
+- Added per-user desktop-session autostart and minimized startup.
+- Added CLI desktop integration commands.
 
 ### Distribution
-- Add an Ubuntu 22.04 x86_64 Linux preview build.
-- Package a self-contained tarball, launch helper, Linux setup helper, README, and SHA-256 checksum.
-
-## 0.3.0
-
-### Precision
-- Normalize pinch distance by palm size.
-- Add hysteresis to noisy pinch states.
-- Add temporal landmark stabilization.
-- Replace simple pointer EMA with adaptive One Euro filtering and a dead-zone.
-- Add keyboard dwell, release guard, cooldown, and safe key-edge inset.
-- Validate calibration geometry and expose a calibration quality score.
-- Project keyboard keys into the calibrated camera quadrilateral.
-
-### Camera
-- Default to a 1080p/30 request.
-- Add requested resolution/FPS/autofocus controls.
-- Report actual camera resolution, backend, and measured FPS.
-
-### Desktop UI
-- New Control Center with live metrics, camera previews, tuning profiles, calibration workflow, and diagnostics.
-- Move capture and MediaPipe processing to a worker thread to keep the Qt UI responsive.
+- Added a Debian/Ubuntu `.deb` package in addition to the portable tarball.
+- Added a packaged Qt offscreen UI smoke test so CLI-only packaging success cannot hide missing Qt plugins.
+- Removed blanket `--collect-all PySide6` from the Linux build and rely on PyInstaller's Qt hooks to reduce package size while retaining explicit UI verification.
+- Added checksums and package-size reporting.
+- Improved the uinput setup helper with boot-time module loading, status, and removal commands.
 
 ### Quality
-- Expand unit coverage and add a real-hardware release quality gate.
+- Expanded unit coverage for persistent camera IDs and Linux desktop-entry generation.
+- 20 local unit tests pass before CI.
 
-### Distribution
-- Build Windows portable and Inno Setup installer artifacts with SHA-256 checksums.
+## 0.4.0 - Linux precision preview
+
+- Added native Linux uinput input injection.
+- Added Wayland/X11 diagnostics and camera discovery.
+- Added Linux Control Center and hover/dwell interaction modes.
+- Added portable Ubuntu 22.04 x86_64 preview packaging.
+
+## 0.3.0 - Precision control center
+
+- Added normalized pinch, hysteresis, One Euro pointer filtering, calibrated projected keyboard rendering, runtime threading, camera metrics, and Windows distribution workflows.
