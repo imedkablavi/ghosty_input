@@ -1,140 +1,93 @@
 <div align="center">
 
-<img src="assets/logo.jpg" alt="Ghosty Input Logo" width="140"/>
+<img src="assets/logo.jpg" alt="شعار Ghosty Input" width="130"/>
 
 # Ghosty Input
 
-**التحكم بالماوس ولوحة مفاتيح على الطاولة باستخدام إيماءات اليد**
+**تحكم بالماوس ولوحة مفاتيح على سطح المكتب باستخدام إيماءات اليد — بالكامل محليًا**
 
-تطبيق سطح مكتب يعمل بالكامل دون إنترنت، يتيح لك التحكم بالماوس والكتابة على لوحة مفاتيح موضوعة على الطاولة باستخدام إيماءات اليد وتقنيات الرؤية الحاسوبية.
-
-[الموقع](https://imedkablavi.info) ·
-[الإصدارات](https://github.com/imedkablavi/ghosty_input/releases) ·
-[المشاكل](https://github.com/imedkablavi/ghosty_input/issues) ·
-[التوثيق](docs/)
-
-<br/>
-
-<img src="https://img.shields.io/github/v/release/imedkablavi/ghosty_input?label=release"/>
-<img src="https://img.shields.io/github/license/imedkablavi/ghosty_input"/>
-<img src="https://img.shields.io/github/issues/imedkablavi/ghosty_input"/>
-<img src="https://img.shields.io/github/stars/imedkablavi/ghosty_input"/>
-<img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey"/>
-<img src="https://img.shields.io/badge/python-3.10%20%7C%203.11-blue"/>
-
-<br/><br/>
-
-**اللغة**  
-[English](README.md) · [العربية](README.ar.md) · [Türkçe](README.tr.md)
+[English](README.md) · [Türkçe](README.tr.md) · [المعمارية](docs/ARCHITECTURE.md) · [الخصوصية](PRIVACY.md)
 
 </div>
 
----
-
-## نظرة عامة
-
-**Ghosty Input** هو تطبيق سطح مكتب يتيح التحكم بالماوس والكتابة على لوحة مفاتيح افتراضية موضوعة على الطاولة باستخدام إيماءات اليد.
-
-- الكاميرا الأمامية مخصّصة للتحكم بالماوس  
-- الكاميرا العلوية تُستخدم لمعايرة لوحة المفاتيح  
-- يمكن العمل بكاميرا واحدة أو كاميرتين  
-- جميع العمليات تتم محليًا دون اتصال بالإنترنت  
-
----
+Ghosty Input يحوّل كاميرا واحدة أو كاميرتين عاديتين إلى نظام إدخال بدون لمس. الكاميرا الأمامية تتبع اليد للتحكم بالماوس، والكاميرا العلوية الاختيارية تربط مساحة معايرة على الطاولة بلوحة مفاتيح QWERTY افتراضية.
 
 ## المزايا
 
-- بنية تعتمد على كاميرتين  
-  - كاميرا أمامية للتحكم بالماوس  
-  - كاميرا علوية للوحة المفاتيح
-- دعم تلقائي لوضع الكاميرا الواحدة عند الحاجة
-- معايرة سطح الطاولة عبر أربع نقاط
-- التحكم بالماوس بالإيماءات (تحريك، نقر، سحب، تمرير، إيقاف)
-- لوحة مفاتيح افتراضية اختيارية
-- إيماءات خاصة باليد اليسرى (مسافة، حذف، شِفت، إدخال)
-- حفظ الإعدادات وملفات المستخدم محليًا
+- تحريك المؤشر بالسبابة اليمنى مع تنعيم للحركة
+- ضم الإبهام والسبابة للنقر الأيسر
+- ضم الإبهام والوسطى للنقر الأيمن
+- ضم الإبهام والبنصر مع الاستمرار للسحب
+- تمرير بإشارة إصبعين
+- إيقاف/استئناف التحكم بعد إبقاء اليد قبضة لمدة 0.75 ثانية
+- وضع كاميرا واحدة أو كاميرتين
+- معايرة سطح المكتب بأربع نقاط
+- لوحة مفاتيح QWERTY على سطح الطاولة مع Overlay
+- اختصارات لليد اليسرى: Shift وBackspace وEnter وSpace
+- حفظ الإعدادات والمعايرة محليًا
+- واجهة Qt مع معاينة مباشرة للكاميرات
+- اختبارات آلية وGitHub Actions
+- دون Telemetry أو اتصال شبكي أثناء التشغيل
 
----
+## المتطلبات
 
-## دليل الإيماءات
+- Python 3.10 أو 3.11
+- كاميرا واحدة على الأقل
+- كاميرتان موصى بهما عند استخدام لوحة المفاتيح على الطاولة
+- Windows أو Linux
+- صلاحية الوصول إلى الكاميرا
 
-<div align="center">
-  <img src="assets/screenshots/gesture-guideAR.jpg" width="100%"/>
-</div>
-
-**ملاحظات**
-- الكاميرا الأمامية تتحكم بالماوس
-- الكاميرا العلوية تتحكم بلوحة المفاتيح
-- الكتابة تتطلب إجراء المعايرة أولًا
-
----
-
-## صور من التطبيق
-
-### الواجهة الرئيسية
-<div align="center">
-  <img src="assets/screenshots/dashboard.png" width="100%"/>
-</div>
-
-### لوحة المفاتيح الافتراضية
-<div align="center">
-  <img src="assets/screenshots/keyboard-overlay.png" width="100%"/>
-</div>
-
----
-
-## التثبيت
-
-### للمستخدمين (موصى به)
-
-#### مثبت ويندوز
-1. انتقل إلى صفحة **Releases**
-2. حمّل ملف **GhostyInputSetup.exe**
-3. ثبّت التطبيق ثم شغّله
-
-لا حاجة لتثبيت Python أو أدوات تطوير.
-
-#### النسخة المحمولة
-- حمّل ملف ZIP
-- فك الضغط ثم شغّل `GhostyInput.exe`
-
----
-
-### للمطورين
+## التشغيل من المصدر
 
 ```bash
 git clone https://github.com/imedkablavi/ghosty_input.git
 cd ghosty_input
 python -m venv .venv
+```
+
+Linux:
+
+```bash
 source .venv/bin/activate
 pip install -r requirements.txt
 python run.py
-يتطلب Python 3.10 أو 3.11.
-
-أوضاع الكاميرا
-كاميرا واحدة: يتم استخدام بث واحد مشترك للماوس ولوحة المفاتيح
-
-كاميرتان: الكاميرا الأمامية للماوس، والعلوية للوحة المفاتيح
-
-اختفاء المعاينة الثانية أمر طبيعي عند استخدام كاميرا واحدة.
-
-الملفات والسجلات
-Windows: %APPDATA%\GhostyInput
-
-Linux: ~/.local/share/GhostyInput
-
-استكشاف الأخطاء
-شاشة سوداء: تحقق من رقم الكاميرا أو أذونات الخصوصية
-
-لوحة المفاتيح لا تعمل: تأكد من إجراء المعايرة
-
-أخطاء MediaPipe: استخدم Python 3.10 أو 3.11 فقط
-
-الخصوصية
-يعمل Ghosty Input دون اتصال بالإنترنت.
-لا يتم إرسال أو تخزين أي بيانات للمستخدم.
 ```
 
+Windows PowerShell:
 
-  ## 💰 You can help me by Donating
-  [![BuyMeACoffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/imed_kablavi) 
+```powershell
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python run.py
+```
+
+## المعايرة
+
+1. شغّل التطبيق واضغط **Start**.
+2. فعّل الكاميرا العلوية المنفصلة إذا كنت تستخدم كاميرتين.
+3. اضغط **Calibrate desk**.
+4. اضغط على زوايا مساحة لوحة المفاتيح بالترتيب: أعلى يسار، أعلى يمين، أسفل يمين، أسفل يسار.
+5. بعد الحفظ، حرّك سبابة اليد اليمنى فوق المفتاح واضمم الإبهام مع السبابة للكتابة.
+
+## بيانات المستخدم
+
+- Windows: `%APPDATA%\GhostyInput\config.json`
+- Linux: `~/.local/share/GhostyInput/config.json`
+
+لا يقوم التطبيق بحفظ صور الكاميرا أو النص المكتوب.
+
+## التطوير والاختبارات
+
+```bash
+pip install -r requirements-ci.txt
+ruff check .
+pytest
+```
+
+## الحالة الحالية
+
+هذه نسخة معاد بناؤها من الصفر بالاعتماد على مواصفات المشروع والصور التي بقيت في المستودع. تم تنفيذ البنية الأساسية، التتبع، الإيماءات، المعايرة، لوحة المفاتيح، الواجهة، الاختبارات وWorkflow لبناء نسخة Windows Portable. قد تحتاج قيم حساسية الإيماءات إلى ضبط حسب الكاميرا والإضاءة والمسافة.
+
+## الدعم
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/imed_kablavi)
