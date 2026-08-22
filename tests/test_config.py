@@ -7,11 +7,31 @@ from ghosty_input.config import AppConfig, load_config, save_config
 
 def test_config_roundtrip(tmp_path: Path):
     path = tmp_path / "config.json"
-    cfg = AppConfig(front_camera=2, dual_camera=True, camera_width=1920, camera_height=1080, keyboard_dwell_ms=110, input_backend="uinput", pointer_activation_mode="hover", keyboard_activation_mode="hover", screen_width=2560, screen_height=1440, calibration_points=[[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]])
+    cfg = AppConfig(
+        front_camera=2,
+        front_camera_id="/dev/v4l/by-id/front",
+        top_camera_id="/dev/v4l/by-id/desk",
+        dual_camera=True,
+        top_camera_autofocus=False,
+        camera_reconnect_ms=1200,
+        camera_width=1920,
+        camera_height=1080,
+        keyboard_dwell_ms=110,
+        input_backend="uinput",
+        pointer_activation_mode="hover",
+        keyboard_activation_mode="hover",
+        screen_width=2560,
+        screen_height=1440,
+        calibration_points=[[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]],
+    )
     save_config(cfg, path)
     loaded = load_config(path)
     assert loaded.front_camera == 2
+    assert loaded.front_camera_id == "/dev/v4l/by-id/front"
+    assert loaded.top_camera_id == "/dev/v4l/by-id/desk"
     assert loaded.dual_camera is True
+    assert loaded.top_camera_autofocus is False
+    assert loaded.camera_reconnect_ms == 1200
     assert loaded.camera_width == 1920
     assert loaded.keyboard_dwell_ms == 110
     assert loaded.input_backend == "uinput"

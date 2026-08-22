@@ -289,9 +289,34 @@ def create_input_backend(
     *,
     screen_size: tuple[int, int] | None = None,
 ) -> InputBackend:
-    selected = select_backend_name(requested)
+    environment = inspect_input_environment()
+    selected = select_backend_name(requested, environment=environment)
+
     if selected == "uinput":
-        return UInputBackend(screen_size)
+        try:
+            return UInputBackend(screen_size)
+        except InputBackendError as uinput_error:
+            if requested != "auto":
+                raise
+            try:
+                return PyAutoGUIBackend(screen_size)
+            except InputBackendError as fallback_error:
+                raise InputBackendError(
+                    "Native uinput failed and the PyAutoGUI fallback could not initialize. "
+                    f"uinput: {uinput_error}; fallback: {fallback_error}"
+                ) from fallback_error
+
     if selected == "pyautogui":
-        return PyAutoGUIBackend(screen_size)
+        try:
+            return PyAutoGUIBackend(screen_size)
+        except InputBackendError as pyautogui_error:
+            if requested == "auto" and environment.system == "Linux":
+                suffix = (
+                    " On Wayland, run ghosty-input-linux-setup.sh to enable /dev/uinput."
+                    if environment.wayland
+                    else " Check DISPLAY and your desktop session permissions."
+                )
+                raise InputBackendError(f"Automatic Linux input setup failed.{suffix}") from pyautogui_error
+            raise
+
     raise InputBackendError(f"No implementation for backend: {selected}")
