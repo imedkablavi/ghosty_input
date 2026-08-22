@@ -1,0 +1,92 @@
+name: Build Linux Preview
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: ["main"]
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Linux runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 \
+            libgl1 \
+            libglib2.0-0 \
+            libxkbcommon-x11-0 \
+            libxcb-xinerama0
+
+      - name: Install application and build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt "pyinstaller>=6.10,<7"
+
+      - name: Validate sources
+        run: |
+          python -m compileall -q ghosty_input tests
+          python run.py --version
+          python run.py --diagnose
+
+      - name: Build Linux application
+        run: |
+          pyinstaller \
+            --noconfirm \
+            --clean \
+            --onedir \
+            --name GhostyInput \
+            --collect-all mediapipe \
+            --collect-all PySide6 \
+            --collect-all evdev \
+            --add-data "assets:assets" \
+            run.py
+
+      - name: Verify packaged CLI
+        run: |
+          ./dist/GhostyInput/GhostyInput --version
+          ./dist/GhostyInput/GhostyInput --diagnose > dist/GhostyInput/BUILD-DIAGNOSTICS.txt
+
+      - name: Add Linux launch and setup helpers
+        run: |
+          cp scripts/ghosty-input-linux-setup.sh dist/GhostyInput/
+          cp docs/LINUX.md dist/GhostyInput/README-LINUX.md
+          cat > dist/GhostyInput/run-ghosty.sh <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+          exec "${HERE}/GhostyInput" "$@"
+          SH
+          chmod +x \
+            dist/GhostyInput/GhostyInput \
+            dist/GhostyInput/run-ghosty.sh \
+            dist/GhostyInput/ghosty-input-linux-setup.sh
+
+      - name: Package preview and checksum
+        run: |
+          tar -C dist -czf dist/GhostyInput-Linux-x86_64.tar.gz GhostyInput
+          cd dist
+          sha256sum GhostyInput-Linux-x86_64.tar.gz > GhostyInput-Linux-x86_64.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GhostyInput-Linux-x86_64
+          path: |
+            dist/GhostyInput-Linux-x86_64.tar.gz
+            dist/GhostyInput-Linux-x86_64.sha256
+          if-no-files-found: error
+          retention-days: 14

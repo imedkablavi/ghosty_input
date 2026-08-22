@@ -7,8 +7,9 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-
 APP_NAME = "GhostyInput"
+INPUT_BACKENDS = {"auto", "uinput", "pyautogui"}
+ACTIVATION_MODES = {"pinch", "hover"}
 
 
 def app_data_dir() -> Path:
@@ -27,24 +28,97 @@ class AppConfig:
     front_camera: int = 0
     top_camera: int = 1
     dual_camera: bool = False
+
+    camera_width: int = 1920
+    camera_height: int = 1080
+    camera_fps: int = 30
+    camera_autofocus: bool = True
+    camera_exposure: float | None = None
+
     keyboard_enabled: bool = True
     mirror_front: bool = True
     draw_landmarks: bool = True
-    smoothing: float = 0.35
-    pinch_threshold: float = 0.055
-    scroll_sensitivity: float = 5.0
-    keyboard_cooldown_ms: int = 350
+
+    detection_confidence: float = 0.65
+    tracking_confidence: float = 0.65
+
+    input_backend: str = "auto"
+    screen_width: int = 0
+    screen_height: int = 0
+
+    pointer_smoothing: float = 0.28
+    pointer_deadzone_px: float = 1.5
+    pointer_active_margin: float = 0.055
+    pointer_activation_mode: str = "pinch"
+    pointer_dwell_ms: int = 700
+    pointer_dwell_radius: float = 0.018
+
+    pinch_engage_ratio: float = 0.31
+    pinch_release_ratio: float = 0.42
+    scroll_sensitivity: float = 4.0
+
+    keyboard_activation_mode: str = "pinch"
+    keyboard_hover_ms: int = 650
+    keyboard_dwell_ms: int = 90
+    keyboard_release_ms: int = 70
+    keyboard_cooldown_ms: int = 180
+    keyboard_edge_inset: float = 0.012
+
     calibration_points: list[list[float]] = field(default_factory=list)
+
+    smoothing: float | None = None
+    pinch_threshold: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.smoothing is not None:
+            self.pointer_smoothing = float(self.smoothing)
+            self.smoothing = None
 
     def validate(self) -> None:
         if self.front_camera < 0 or self.top_camera < 0:
             raise ValueError("Camera indices must be non-negative.")
-        if not 0.05 <= self.smoothing <= 1.0:
-            raise ValueError("Smoothing must be between 0.05 and 1.0.")
-        if not 0.02 <= self.pinch_threshold <= 0.15:
-            raise ValueError("Pinch threshold must be between 0.02 and 0.15.")
-        if self.keyboard_cooldown_ms < 100:
-            raise ValueError("Keyboard cooldown must be at least 100 ms.")
+        if self.camera_width < 640 or self.camera_height < 480:
+            raise ValueError("Camera resolution must be at least 640x480.")
+        if not 15 <= self.camera_fps <= 120:
+            raise ValueError("Camera FPS must be between 15 and 120.")
+        if not 0.3 <= self.detection_confidence <= 0.95:
+            raise ValueError("Detection confidence must be between 0.3 and 0.95.")
+        if not 0.3 <= self.tracking_confidence <= 0.95:
+            raise ValueError("Tracking confidence must be between 0.3 and 0.95.")
+        if self.input_backend not in INPUT_BACKENDS:
+            raise ValueError(f"Unsupported input backend: {self.input_backend}.")
+        if bool(self.screen_width) != bool(self.screen_height):
+            raise ValueError("Screen width and height must both be set or both be zero.")
+        if self.screen_width and (self.screen_width < 640 or self.screen_height < 480):
+            raise ValueError("Detected screen size is unexpectedly small.")
+        if not 0.05 <= self.pointer_smoothing <= 0.95:
+            raise ValueError("Pointer smoothing must be between 0.05 and 0.95.")
+        if not 0.0 <= self.pointer_deadzone_px <= 20:
+            raise ValueError("Pointer deadzone must be between 0 and 20 pixels.")
+        if not 0.0 <= self.pointer_active_margin <= 0.2:
+            raise ValueError("Pointer active margin must be between 0 and 0.2.")
+        if self.pointer_activation_mode not in ACTIVATION_MODES:
+            raise ValueError("Pointer activation mode must be 'pinch' or 'hover'.")
+        if not 250 <= self.pointer_dwell_ms <= 2500:
+            raise ValueError("Pointer dwell must be between 250 and 2500 ms.")
+        if not 0.005 <= self.pointer_dwell_radius <= 0.08:
+            raise ValueError("Pointer dwell radius must be between 0.005 and 0.08.")
+        if not 0.12 <= self.pinch_engage_ratio <= 0.8:
+            raise ValueError("Pinch engage ratio must be between 0.12 and 0.8.")
+        if not self.pinch_engage_ratio + 0.03 <= self.pinch_release_ratio <= 1.2:
+            raise ValueError("Pinch release ratio must be at least 0.03 above engage ratio.")
+        if self.keyboard_activation_mode not in ACTIVATION_MODES:
+            raise ValueError("Keyboard activation mode must be 'pinch' or 'hover'.")
+        if not 250 <= self.keyboard_hover_ms <= 2500:
+            raise ValueError("Keyboard hover activation must be between 250 and 2500 ms.")
+        if not 20 <= self.keyboard_dwell_ms <= 800:
+            raise ValueError("Keyboard dwell must be between 20 and 800 ms.")
+        if not 20 <= self.keyboard_release_ms <= 800:
+            raise ValueError("Keyboard release must be between 20 and 800 ms.")
+        if not 60 <= self.keyboard_cooldown_ms <= 2000:
+            raise ValueError("Keyboard cooldown must be between 60 and 2000 ms.")
+        if not 0.0 <= self.keyboard_edge_inset <= 0.08:
+            raise ValueError("Keyboard edge inset must be between 0 and 0.08.")
         if self.calibration_points and len(self.calibration_points) != 4:
             raise ValueError("Calibration requires exactly four points.")
 
@@ -74,6 +148,9 @@ def save_config(config: AppConfig, path: Path | None = None) -> None:
     config.validate()
     target = path or config_path()
     target.parent.mkdir(parents=True, exist_ok=True)
+    payload = asdict(config)
+    payload.pop("smoothing", None)
+    payload.pop("pinch_threshold", None)
     temp = target.with_suffix(".tmp")
-    temp.write_text(json.dumps(asdict(config), indent=2), encoding="utf-8")
+    temp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     temp.replace(target)
