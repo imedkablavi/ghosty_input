@@ -1,23 +1,31 @@
-# Local secrets and generated files
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Build
+build/
+dist/
+*.spec
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local app / secrets
 .env
 .env.*
 !.env.example
 *.pem
 *.key
-id_rsa
-id_ed25519
 credentials.json
 token.json
 secrets.json
-serviceAccount*.json
-firebase-adminsdk*.json
-node_modules/
-.next/
-dist/
-build/
-coverage/
-__pycache__/
-**pycache**/
-.venv/
-venv/
-.DS_Store
+
+# Runtime artifacts
+*.log
