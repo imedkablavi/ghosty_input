@@ -2,6 +2,8 @@
 
 This build is intended for real-machine testing. It is not a production certification.
 
+The application reports version `0.6.0a1`. The Debian package internally uses `0.6.0~a1` so Debian correctly sorts the Alpha before the future stable `0.6.0` package.
+
 ## Before starting the engine
 
 Run the lightweight readiness check:
