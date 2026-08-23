@@ -130,7 +130,7 @@ def _assets(payload: dict) -> list[ReleaseAsset]:
             size = int(item.get("size") or 0)
         except (TypeError, ValueError):
             size = 0
-        if name and url.startswith(RELEASE_DOWNLOAD_PREFIX) and 0 <= size <= MAX_PACKAGE_BYTES:
+        if name and url.startswith(RELEASE_DOWNLOAD_PREFIX) and 0 < size <= MAX_PACKAGE_BYTES:
             result.append(ReleaseAsset(name=name, url=url, size=size))
     return result
 
@@ -142,9 +142,11 @@ def installation_kind() -> str:
     if system == "Windows":
         return "windows-installer"
     if system == "Linux":
-        executable = Path(sys.executable).resolve()
+        # Use POSIX lexical path semantics explicitly. This keeps classification
+        # deterministic in cross-platform tests and matches Linux frozen paths.
+        executable = PurePosixPath(str(sys.executable))
         try:
-            executable.relative_to(Path("/opt/ghosty-input"))
+            executable.relative_to(PurePosixPath("/opt/ghosty-input"))
         except ValueError:
             return "linux-portable"
         return "linux-deb"
@@ -225,7 +227,6 @@ def _release_candidate(payload: dict, *, channel: str) -> UpdateInfo | None:
         package = _pick_platform_asset(assets)
         checksum = _pick_checksum_asset(assets, package=package)
     except UpdateError:
-        # A release can be visible briefly before CI finishes uploading all assets.
         return None
     return UpdateInfo(
         current_version=__version__,
@@ -330,7 +331,6 @@ def _validate_portable_archive(package: Path) -> None:
                         raise UpdateError(f"Unsafe absolute link in update archive: {member.name}")
                     _normalize_archive_path(member_path.parent / link)
                 elif member.islnk():
-                    # tar hard-link targets are archive-root relative.
                     _normalize_archive_path(PurePosixPath(member.linkname))
     except (tarfile.TarError, OSError) as exc:
         raise UpdateError(f"Unable to inspect portable update archive: {exc}") from exc
