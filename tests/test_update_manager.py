@@ -1,3 +1,5 @@
+import io
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -21,22 +23,91 @@ def test_checksum_parser_accepts_sha256sum_format():
     assert parsed["ghosty.deb"] == "b" * 64
 
 
+def _linux_release_payload(*, prerelease: bool = True, complete: bool = True) -> dict:
+    assets = [
+        {
+            "name": "GhostyInput-Linux-x86_64-v0.6.0a2.tar.gz",
+            "browser_download_url": (
+                "https://github.com/imedkablavi/ghosty_input/releases/download/"
+                "v0.6.0a2/GhostyInput-Linux-x86_64-v0.6.0a2.tar.gz"
+            ),
+            "size": 1024,
+        }
+    ]
+    if complete:
+        assets.append(
+            {
+                "name": "SHA256SUMS-Linux.txt",
+                "browser_download_url": (
+                    "https://github.com/imedkablavi/ghosty_input/releases/download/"
+                    "v0.6.0a2/SHA256SUMS-Linux.txt"
+                ),
+                "size": 128,
+            }
+        )
+    return {
+        "draft": False,
+        "prerelease": prerelease,
+        "tag_name": "v0.6.0a2",
+        "html_url": "https://github.com/imedkablavi/ghosty_input/releases/tag/v0.6.0a2",
+        "body": "Alpha update",
+        "assets": assets,
+    }
+
+
+def test_auto_channel_accepts_newer_alpha_for_alpha_build(monkeypatch):
+    monkeypatch.setattr(update_manager.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(update_manager.sys, "frozen", False, raising=False)
+    candidate = update_manager._release_candidate(_linux_release_payload(), channel="auto")
+    assert candidate is not None
+    assert candidate.version == "0.6.0a2"
+    assert candidate.asset.name.endswith(".tar.gz")
+    assert candidate.checksum_asset.name == "SHA256SUMS-Linux.txt"
+
+
+def test_stable_channel_rejects_alpha_release(monkeypatch):
+    monkeypatch.setattr(update_manager.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(update_manager.sys, "frozen", False, raising=False)
+    assert update_manager._release_candidate(_linux_release_payload(), channel="stable") is None
+
+
+def test_incomplete_release_is_ignored_until_assets_finish_uploading(monkeypatch):
+    monkeypatch.setattr(update_manager.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(update_manager.sys, "frozen", False, raising=False)
+    assert (
+        update_manager._release_candidate(
+            _linux_release_payload(complete=False),
+            channel="alpha",
+        )
+        is None
+    )
+
+
+def test_installation_kind_distinguishes_deb_and_portable(monkeypatch):
+    monkeypatch.setattr(update_manager.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(update_manager.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(update_manager.sys, "executable", "/opt/ghosty-input/GhostyInput")
+    assert update_manager.installation_kind() == "linux-deb"
+    monkeypatch.setattr(update_manager.sys, "executable", "/home/test/GhostyInput/GhostyInput")
+    assert update_manager.installation_kind() == "linux-portable"
+
+
 def test_verified_download_rejects_bad_digest(monkeypatch, tmp_path: Path):
     info = UpdateInfo(
         current_version="0.6.0a1",
         version="0.6.0a2",
-        tag="v0.6.0-alpha.2",
-        html_url="https://github.com/imedkablavi/ghosty_input/releases/tag/v0.6.0-alpha.2",
+        tag="v0.6.0a2",
+        html_url="https://github.com/imedkablavi/ghosty_input/releases/tag/v0.6.0a2",
         body="",
         prerelease=True,
         asset=ReleaseAsset(
             "ghosty-input_0.6.0a2_amd64.deb",
-            "https://github.com/example/update.deb",
+            "https://github.com/imedkablavi/ghosty_input/releases/download/v0.6.0a2/update.deb",
             4,
         ),
         checksum_asset=ReleaseAsset(
-            "SHA256SUMS.txt",
-            "https://github.com/example/SHA256SUMS.txt",
+            "SHA256SUMS-Linux.txt",
+            "https://github.com/imedkablavi/ghosty_input/releases/download/v0.6.0a2/SHA256SUMS-Linux.txt",
             100,
         ),
     )
@@ -54,3 +125,14 @@ def test_verified_download_rejects_bad_digest(monkeypatch, tmp_path: Path):
     with pytest.raises(UpdateError, match="SHA-256"):
         update_manager.download_verified_update(info, destination_dir=tmp_path)
     assert not (tmp_path / info.asset.name).exists()
+
+
+def test_portable_archive_rejects_path_traversal(tmp_path: Path):
+    archive_path = tmp_path / "update.tar.gz"
+    payload = b"bad"
+    with tarfile.open(archive_path, "w:gz") as archive:
+        member = tarfile.TarInfo("GhostyInput/../../escape")
+        member.size = len(payload)
+        archive.addfile(member, io.BytesIO(payload))
+    with pytest.raises(UpdateError, match="Unsafe path"):
+        update_manager._validate_portable_archive(archive_path)
