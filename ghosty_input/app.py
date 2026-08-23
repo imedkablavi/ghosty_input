@@ -109,6 +109,46 @@ def _handle_linux_desktop_actions(args: argparse.Namespace) -> bool:
     return True
 
 
+def _run_linux_ui_smoke_test() -> int:
+    import os
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    import ghosty_input.ui.instance_lock as instance_lock
+    from ghosty_input.ui.linux_window import LinuxWindow
+
+    app = QApplication.instance() or QApplication([])
+    with TemporaryDirectory(prefix="ghosty-alpha-smoke-") as temp:
+        data_dir = Path(temp) / "GhostyInput"
+        original_data_dir = instance_lock.app_data_dir
+        instance_lock.app_data_dir = lambda: data_dir
+        first = None
+        try:
+            first, first_error = instance_lock.acquire_instance_lock()
+            if first is None:
+                raise RuntimeError(f"instance lock smoke failed: {first_error}")
+            second, second_error = instance_lock.acquire_instance_lock()
+            if second is not None:
+                second.unlock()
+                raise RuntimeError("instance lock smoke failed: duplicate lock was acquired")
+            if "already running" not in second_error.lower():
+                raise RuntimeError(f"unexpected duplicate-instance message: {second_error}")
+        finally:
+            if first is not None:
+                first.unlock()
+            instance_lock.app_data_dir = original_data_dir
+
+    window = LinuxWindow()
+    window.config.linux_close_to_tray = False
+    window.close()
+    app.processEvents()
+    print("Linux UI + instance lock smoke test: ok")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.version:
@@ -160,20 +200,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.ui_smoke_test:
             if platform.system() != "Linux":
                 return 0
-            import os
-
-            os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-            from PySide6.QtWidgets import QApplication
-
-            from ghosty_input.ui.linux_window import LinuxWindow
-
-            app = QApplication.instance() or QApplication([])
-            window = LinuxWindow()
-            window.config.linux_close_to_tray = False
-            window.close()
-            app.processEvents()
-            print("Linux UI smoke test: ok")
-            return 0
+            return _run_linux_ui_smoke_test()
 
         if platform.system() == "Linux":
             from ghosty_input.ui.linux_window import run_linux_ui
