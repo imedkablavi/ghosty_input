@@ -68,9 +68,23 @@ def select_backend_name(
         return requested
 
     env = environment or inspect_input_environment()
+    # Wayland is deliberately fail-closed: system-wide input must use the
+    # kernel uinput backend. Returning pyautogui here could appear to work in
+    # some compositors while silently losing global input on others.
+    if env.system == "Linux" and env.wayland:
+        return "uinput"
     if env.system == "Linux" and env.uinput_writable:
         return "uinput"
     return "pyautogui"
+
+
+def validate_backend_for_environment(selected: str, environment: InputEnvironment) -> None:
+    if environment.system == "Linux" and environment.wayland and selected != "uinput":
+        raise InputBackendError(
+            "Wayland input is fail-closed. Ghosty Input will not use the PyAutoGUI "
+            "fallback in a Wayland session. Enable writable /dev/uinput with the "
+            "bundled Linux setup helper, sign out and back in, then retry."
+        )
 
 
 class InputBackend(Protocol):
@@ -291,12 +305,16 @@ def create_input_backend(
 ) -> InputBackend:
     environment = inspect_input_environment()
     selected = select_backend_name(requested, environment=environment)
+    validate_backend_for_environment(selected, environment)
 
     if selected == "uinput":
         try:
             return UInputBackend(screen_size)
         except InputBackendError as uinput_error:
-            if requested != "auto":
+            # Never downgrade to a weaker backend on Wayland. A compositor may
+            # accept a local fallback in one application and reject it in
+            # another, which is worse than an explicit startup failure.
+            if requested != "auto" or environment.wayland:
                 raise
             try:
                 return PyAutoGUIBackend(screen_size)
@@ -311,11 +329,7 @@ def create_input_backend(
             return PyAutoGUIBackend(screen_size)
         except InputBackendError as pyautogui_error:
             if requested == "auto" and environment.system == "Linux":
-                suffix = (
-                    " On Wayland, run ghosty-input-linux-setup.sh to enable /dev/uinput."
-                    if environment.wayland
-                    else " Check DISPLAY and your desktop session permissions."
-                )
+                suffix = " Check DISPLAY and your desktop session permissions."
                 raise InputBackendError(f"Automatic Linux input setup failed.{suffix}") from pyautogui_error
             raise
 
