@@ -4,7 +4,9 @@ Ghosty Input checks the project's official GitHub Releases for newer packaged bu
 
 ## User behavior
 
-Packaged builds check for updates at startup when `auto_check_updates` is enabled. The default update channel is `auto`:
+Packaged builds check for updates at startup when `auto_check_updates` is enabled. Automatic checks are rate-limited to one attempt every six hours so repeated application launches do not repeatedly contact GitHub or consume the public API allowance.
+
+The default update channel is `auto`:
 
 - an Alpha build accepts newer Alpha releases and stable releases;
 - a stable build accepts stable releases only;
@@ -13,15 +15,21 @@ Packaged builds check for updates at startup when `auto_check_updates` is enable
 
 When an update is found, Ghosty Input asks before downloading or installing it. It does not silently replace the application.
 
-CLI equivalents:
+CLI controls:
 
 ```bash
 ghosty-input --check-update
 ghosty-input --check-update --update-channel stable
 ghosty-input --update
+
+ghosty-input --set-update-channel auto
+ghosty-input --set-update-channel stable
+ghosty-input --set-update-channel alpha
+ghosty-input --enable-auto-update-check
+ghosty-input --disable-auto-update-check
 ```
 
-Source checkouts can check for releases but are not overwritten automatically.
+Manual `--check-update` and `--update` commands bypass the six-hour startup cooldown. Source checkouts can check for releases but are not overwritten automatically.
 
 ## Integrity and trust boundary
 
