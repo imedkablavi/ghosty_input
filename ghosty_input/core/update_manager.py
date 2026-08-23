@@ -5,26 +5,31 @@ import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Iterable
 
 from ghosty_input import __version__
 
 
 GITHUB_REPOSITORY = "imedkablavi/ghosty_input"
-LATEST_RELEASE_API = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/releases/latest"
+RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/releases?per_page=20"
+RELEASE_DOWNLOAD_PREFIX = f"https://github.com/{GITHUB_REPOSITORY}/releases/download/"
 USER_AGENT = f"GhostyInput/{__version__}"
+GITHUB_API_VERSION = "2026-03-10"
 DEFAULT_TIMEOUT = 8.0
-MAX_RELEASE_JSON_BYTES = 2 * 1024 * 1024
+MAX_RELEASE_JSON_BYTES = 4 * 1024 * 1024
 MAX_CHECKSUM_BYTES = 512 * 1024
 MAX_PACKAGE_BYTES = 700 * 1024 * 1024
+UPDATE_CHANNELS = {"auto", "stable", "alpha"}
 
 
 class UpdateError(RuntimeError):
@@ -55,11 +60,7 @@ class UpdateInfo:
 
 
 def _version_key(value: str) -> tuple[int, int, int, int, int]:
-    """Compare the project's simple stable/alpha semantic versions.
-
-    Supported examples: 0.6.0, 0.6.0a1, v0.6.0-alpha.2.
-    Stable releases sort newer than their prerelease counterparts.
-    """
+    """Compare the project's stable and alpha semantic versions."""
 
     raw = value.strip().lower().lstrip("v")
     raw = raw.replace("-alpha.", "a").replace("-alpha", "a")
@@ -95,12 +96,13 @@ def _read_limited(response, limit: int) -> bytes:
 
 
 def _request_bytes(url: str, *, timeout: float, limit: int) -> bytes:
+    is_api = url.startswith("https://api.github.com/")
     request = urllib.request.Request(
         url,
         headers={
-            "Accept": "application/vnd.github+json",
+            "Accept": "application/vnd.github+json" if is_api else "application/octet-stream",
             "User-Agent": USER_AGENT,
-            "X-GitHub-Api-Version": "2022-11-28",
+            "X-GitHub-Api-Version": GITHUB_API_VERSION,
         },
         method="GET",
     )
@@ -128,87 +130,103 @@ def _assets(payload: dict) -> list[ReleaseAsset]:
             size = int(item.get("size") or 0)
         except (TypeError, ValueError):
             size = 0
-        if name and url.startswith("https://github.com/") and size >= 0:
+        if name and url.startswith(RELEASE_DOWNLOAD_PREFIX) and 0 <= size <= MAX_PACKAGE_BYTES:
             result.append(ReleaseAsset(name=name, url=url, size=size))
     return result
 
 
-def _pick_checksum_asset(assets: Iterable[ReleaseAsset]) -> ReleaseAsset:
-    preferred = [
-        "SHA256SUMS.txt",
-        "SHA256SUMS-Linux.txt",
-        "SHA256SUMS-Windows.txt",
-    ]
-    by_name = {asset.name: asset for asset in assets}
+def installation_kind() -> str:
+    if not bool(getattr(sys, "frozen", False)):
+        return "source"
+    system = platform.system()
+    if system == "Windows":
+        return "windows-installer"
+    if system == "Linux":
+        executable = Path(sys.executable).resolve()
+        try:
+            executable.relative_to(Path("/opt/ghosty-input"))
+        except ValueError:
+            return "linux-portable"
+        return "linux-deb"
+    return "unsupported"
+
+
+def _pick_platform_asset(assets: Iterable[ReleaseAsset], *, kind: str | None = None) -> ReleaseAsset:
+    items = list(assets)
+    selected_kind = kind or installation_kind()
+    system = platform.system()
+
+    if selected_kind == "windows-installer" or (selected_kind == "source" and system == "Windows"):
+        candidates = [asset for asset in items if asset.name.lower().endswith("setup.exe")]
+    elif selected_kind == "linux-deb":
+        candidates = [asset for asset in items if asset.name.lower().endswith("_amd64.deb")]
+    elif selected_kind in {"linux-portable", "source"} and system == "Linux":
+        candidates = [
+            asset
+            for asset in items
+            if "linux" in asset.name.lower() and asset.name.lower().endswith(".tar.gz")
+        ]
+    else:
+        raise UpdateError(f"Automatic updates are not supported for {selected_kind}.")
+
+    if not candidates:
+        raise UpdateError(f"Release does not contain a compatible {selected_kind} package.")
+    return sorted(candidates, key=lambda item: item.name)[0]
+
+
+def _pick_checksum_asset(
+    assets: Iterable[ReleaseAsset], *, package: ReleaseAsset
+) -> ReleaseAsset:
+    items = list(assets)
+    by_name = {asset.name: asset for asset in items}
+    lower_package = package.name.lower()
+    if lower_package.endswith(".deb") or "linux" in lower_package:
+        preferred = ("SHA256SUMS-Linux.txt", "SHA256SUMS.txt")
+    elif lower_package.endswith(".exe") or "windows" in lower_package:
+        preferred = ("SHA256SUMS-Windows.txt", "SHA256SUMS.txt")
+    else:
+        preferred = ("SHA256SUMS.txt",)
     for name in preferred:
         if name in by_name:
             return by_name[name]
-    for asset in assets:
+    for asset in items:
         if "sha256" in asset.name.lower():
             return asset
     raise UpdateError("Release is missing a SHA-256 checksum asset.")
 
 
-def _pick_platform_asset(assets: Iterable[ReleaseAsset]) -> ReleaseAsset:
-    items = list(assets)
-    system = platform.system()
-    if system == "Windows":
-        candidates = [asset for asset in items if asset.name.lower().endswith("setup.exe")]
-        if not candidates:
-            candidates = [
-                asset
-                for asset in items
-                if "windows" in asset.name.lower() and asset.name.lower().endswith(".exe")
-            ]
-    elif system == "Linux":
-        # Installed Debian-family builds can upgrade through apt by downloading the .deb.
-        if Path("/opt/ghosty-input").exists() or shutil.which("dpkg"):
-            candidates = [asset for asset in items if asset.name.lower().endswith("_amd64.deb")]
-        else:
-            candidates = []
-        if not candidates:
-            candidates = [
-                asset
-                for asset in items
-                if "linux" in asset.name.lower() and asset.name.lower().endswith(".tar.gz")
-            ]
-    else:
-        raise UpdateError(f"Automatic updates are not supported on {system} yet.")
-
-    if not candidates:
-        raise UpdateError(f"Release does not contain a compatible {system} installer.")
-    asset = sorted(candidates, key=lambda item: item.name)[0]
-    if asset.size > MAX_PACKAGE_BYTES:
-        raise UpdateError("Update package exceeds the configured safety limit.")
-    return asset
+def _channel_accepts(channel: str, prerelease: bool) -> bool:
+    if channel not in UPDATE_CHANNELS:
+        raise UpdateError(f"Unsupported update channel: {channel}")
+    if channel == "stable":
+        return not prerelease
+    if channel == "alpha":
+        return True
+    current_is_prerelease = _version_key(__version__)[3] == 0
+    return current_is_prerelease or not prerelease
 
 
-def check_for_update(
-    *,
-    include_prereleases: bool = True,
-    timeout: float = DEFAULT_TIMEOUT,
-) -> UpdateInfo | None:
-    payload = json.loads(
-        _request_bytes(LATEST_RELEASE_API, timeout=timeout, limit=MAX_RELEASE_JSON_BYTES).decode(
-            "utf-8"
-        )
-    )
-    if not isinstance(payload, dict):
-        raise UpdateError("Malformed update response.")
+def _release_candidate(payload: dict, *, channel: str) -> UpdateInfo | None:
     if payload.get("draft"):
         return None
     prerelease = bool(payload.get("prerelease"))
-    if prerelease and not include_prereleases:
+    if not _channel_accepts(channel, prerelease):
         return None
-
-    tag = str(payload.get("tag_name") or "")
-    version = _normalize_tag(tag)
+    try:
+        tag = str(payload.get("tag_name") or "")
+        version = _normalize_tag(tag)
+    except UpdateError:
+        return None
     if _version_key(version) <= _version_key(__version__):
         return None
 
     assets = _assets(payload)
-    asset = _pick_platform_asset(assets)
-    checksum = _pick_checksum_asset(assets)
+    try:
+        package = _pick_platform_asset(assets)
+        checksum = _pick_checksum_asset(assets, package=package)
+    except UpdateError:
+        # A release can be visible briefly before CI finishes uploading all assets.
+        return None
     return UpdateInfo(
         current_version=__version__,
         version=version,
@@ -216,9 +234,26 @@ def check_for_update(
         html_url=str(payload.get("html_url") or ""),
         body=str(payload.get("body") or ""),
         prerelease=prerelease,
-        asset=asset,
+        asset=package,
         checksum_asset=checksum,
     )
+
+
+def check_for_update(*, channel: str = "auto", timeout: float = DEFAULT_TIMEOUT) -> UpdateInfo | None:
+    payload = json.loads(
+        _request_bytes(RELEASES_API, timeout=timeout, limit=MAX_RELEASE_JSON_BYTES).decode("utf-8")
+    )
+    if not isinstance(payload, list):
+        raise UpdateError("Malformed update response.")
+    candidates = [
+        candidate
+        for item in payload
+        if isinstance(item, dict)
+        if (candidate := _release_candidate(item, channel=channel)) is not None
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: _version_key(item.version))
 
 
 def _parse_checksums(text: str) -> dict[str, str]:
@@ -236,11 +271,7 @@ def _parse_checksums(text: str) -> dict[str, str]:
 def _download_to(asset: ReleaseAsset, destination: Path, *, timeout: float) -> None:
     if asset.size > MAX_PACKAGE_BYTES:
         raise UpdateError("Update package exceeds the configured safety limit.")
-    request = urllib.request.Request(
-        asset.url,
-        headers={"User-Agent": USER_AGENT},
-        method="GET",
-    )
+    request = urllib.request.Request(asset.url, headers={"User-Agent": USER_AGENT}, method="GET")
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             if response.status != 200:
@@ -262,6 +293,28 @@ def _download_to(asset: ReleaseAsset, destination: Path, *, timeout: float) -> N
         raise UpdateError(f"Update download returned HTTP {exc.code}.") from exc
     except urllib.error.URLError as exc:
         raise UpdateError(f"Unable to download update: {exc.reason}") from exc
+
+
+def _validate_portable_archive(package: Path) -> None:
+    try:
+        with tarfile.open(package, "r:gz") as archive:
+            members = archive.getmembers()
+            if not members:
+                raise UpdateError("Portable update archive is empty.")
+            for member in members:
+                path = PurePosixPath(member.name)
+                if path.is_absolute() or ".." in path.parts:
+                    raise UpdateError(f"Unsafe path in update archive: {member.name}")
+                if not path.parts or path.parts[0] != "GhostyInput":
+                    raise UpdateError("Portable archive has an unexpected root directory.")
+                if member.ischr() or member.isblk() or member.isfifo():
+                    raise UpdateError(f"Unsafe special file in update archive: {member.name}")
+                if member.issym() or member.islnk():
+                    link = PurePosixPath(member.linkname)
+                    if link.is_absolute() or ".." in link.parts:
+                        raise UpdateError(f"Unsafe link in update archive: {member.name}")
+    except (tarfile.TarError, OSError) as exc:
+        raise UpdateError(f"Unable to inspect portable update archive: {exc}") from exc
 
 
 def download_verified_update(
@@ -296,34 +349,92 @@ def download_verified_update(
             "Downloaded update failed SHA-256 verification. "
             f"Expected {expected}, got {actual}."
         )
+    if package.name.lower().endswith(".tar.gz"):
+        _validate_portable_archive(package)
     return package
 
 
-def launch_installer(package: Path) -> None:
-    system = platform.system()
-    if system == "Windows":
+def _portable_update_script() -> str:
+    return """#!/usr/bin/env bash
+set -euo pipefail
+archive="$1"
+target="$2"
+parent_pid="$3"
+binary_name="$4"
+version="$5"
+parent="$(dirname -- "$target")"
+staging="$(mktemp -d "${parent}/.ghosty-update.XXXXXX")"
+backup="${parent}/.GhostyInput-backup-${version}"
+cleanup() { rm -rf -- "$staging"; }
+trap cleanup EXIT
+while kill -0 "$parent_pid" 2>/dev/null; do sleep 0.2; done
+tar --no-same-owner --no-same-permissions -xzf "$archive" -C "$staging"
+new_root="${staging}/GhostyInput"
+test -x "${new_root}/${binary_name}"
+rm -rf -- "$backup"
+mv -- "$target" "$backup"
+if mv -- "$new_root" "$target"; then
+  if "${target}/${binary_name}" >/dev/null 2>&1 & then
+    rm -rf -- "$backup"
+    rm -f -- "$archive"
+    exit 0
+  fi
+fi
+rm -rf -- "$target"
+mv -- "$backup" "$target"
+exit 1
+"""
+
+
+def launch_installer(package: Path, *, version: str) -> None:
+    kind = installation_kind()
+    if kind == "source":
+        raise UpdateError(
+            "This is a source checkout. The release was downloaded and verified, but source "
+            "trees are not replaced automatically."
+        )
+    if kind == "windows-installer":
         if package.suffix.lower() != ".exe":
             raise UpdateError("Windows update is not an executable installer.")
         subprocess.Popen([str(package)], close_fds=True)
         return
-
-    if system == "Linux" and package.name.lower().endswith(".deb"):
+    if kind == "linux-deb":
+        if not package.name.lower().endswith(".deb"):
+            raise UpdateError("Linux package update is not a Debian package.")
         helper = shutil.which("pkexec")
-        if helper:
-            subprocess.Popen([helper, "apt-get", "install", "-y", str(package)], close_fds=True)
-            return
-        raise UpdateError(
-            "The update was downloaded and verified, but automatic elevation is unavailable. "
-            f"Install it manually with: sudo apt install {package}"
+        if not helper:
+            raise UpdateError(
+                "The update was downloaded and verified, but automatic elevation is unavailable. "
+                f"Install it manually with: sudo apt install {shlex.quote(str(package))}"
+            )
+        subprocess.Popen([helper, "apt-get", "install", "-y", str(package)], close_fds=True)
+        return
+    if kind == "linux-portable":
+        if not package.name.lower().endswith(".tar.gz"):
+            raise UpdateError("Portable Linux update is not a tar.gz archive.")
+        _validate_portable_archive(package)
+        target = Path(sys.executable).resolve().parent
+        binary_name = Path(sys.executable).name
+        helper = package.parent / "apply-ghosty-update.sh"
+        helper.write_text(_portable_update_script(), encoding="utf-8")
+        helper.chmod(0o700)
+        subprocess.Popen(
+            [
+                "/usr/bin/env",
+                "bash",
+                str(helper),
+                str(package),
+                str(target),
+                str(os.getpid()),
+                binary_name,
+                version,
+            ],
+            close_fds=True,
+            start_new_session=True,
         )
-
-    raise UpdateError(
-        "This build can check and securely download updates, but in-place installation is not "
-        "available for the current package type."
-    )
+        return
+    raise UpdateError(f"Automatic updates are not supported for {kind}.")
 
 
 def updater_environment() -> str:
-    frozen = bool(getattr(sys, "frozen", False))
-    package = "packaged" if frozen else "source"
-    return f"{platform.system()} · {platform.machine()} · {package}"
+    return f"{platform.system()} · {platform.machine()} · {installation_kind()}"
