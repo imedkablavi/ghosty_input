@@ -6,34 +6,31 @@ from ghosty_input.core.update_manager import UpdateInfo, check_for_update, downl
 
 
 class _CheckThread(QThread):
-    found = Signal(object)
-    failed = Signal(str)
-
     def __init__(self, channel: str) -> None:
         super().__init__()
         self.channel = channel
+        self.result: UpdateInfo | None = None
+        self.error = ""
 
     def run(self) -> None:
         try:
-            self.found.emit(check_for_update(channel=self.channel))
+            self.result = check_for_update(channel=self.channel)
         except Exception as exc:
-            self.failed.emit(f"{type(exc).__name__}: {exc}")
+            self.error = f"{type(exc).__name__}: {exc}"
 
 
 class _DownloadThread(QThread):
-    ready = Signal(object, str)
-    failed = Signal(str)
-
     def __init__(self, info: UpdateInfo) -> None:
         super().__init__()
         self.info = info
+        self.path = ""
+        self.error = ""
 
     def run(self) -> None:
         try:
-            package = download_verified_update(self.info)
-            self.ready.emit(self.info, str(package))
+            self.path = str(download_verified_update(self.info))
         except Exception as exc:
-            self.failed.emit(f"{type(exc).__name__}: {exc}")
+            self.error = f"{type(exc).__name__}: {exc}"
 
 
 class UpdateController(QObject):
@@ -59,8 +56,6 @@ class UpdateController(QObject):
             return
         self.busy_changed.emit(True)
         worker = _CheckThread(channel)
-        worker.found.connect(self._check_done)
-        worker.failed.connect(self._failed)
         worker.finished.connect(self._check_finished)
         self._check = worker
         worker.start()
@@ -70,24 +65,37 @@ class UpdateController(QObject):
             return
         self.busy_changed.emit(True)
         worker = _DownloadThread(info)
-        worker.ready.connect(self.downloaded)
-        worker.failed.connect(self._failed)
         worker.finished.connect(self._download_finished)
         self._download = worker
         worker.start()
 
-    def _check_done(self, info: object) -> None:
-        self.checked.emit(info)
-
-    def _failed(self, message: str) -> None:
-        self.failed.emit(message)
-
     def _check_finished(self) -> None:
+        worker = self._check
+        if worker is None:
+            return
+        error = worker.error
+        result = worker.result
         self._check = None
-        if not self.busy:
-            self.busy_changed.emit(False)
+        self.busy_changed.emit(False)
+        if error:
+            self.failed.emit(error)
+        else:
+            self.checked.emit(result)
+        worker.deleteLater()
 
     def _download_finished(self) -> None:
+        worker = self._download
+        if worker is None:
+            return
+        error = worker.error
+        info = worker.info
+        path = worker.path
         self._download = None
-        if not self.busy:
-            self.busy_changed.emit(False)
+        self.busy_changed.emit(False)
+        if error:
+            self.failed.emit(error)
+        elif path:
+            self.downloaded.emit(info, path)
+        else:
+            self.failed.emit("Update download finished without producing a package.")
+        worker.deleteLater()
