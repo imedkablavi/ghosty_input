@@ -65,11 +65,12 @@ jobs:
       - name: Verify portable binary
         shell: pwsh
         run: |
-          $exe = "dist/GhostyInput/GhostyInput.exe"
+          $exe = Resolve-Path "dist/GhostyInput/GhostyInput.exe"
           if (-not (Test-Path $exe)) { throw "GhostyInput.exe was not produced." }
-          $actual = & $exe --version
-          if ($actual.Trim() -ne $env:VERSION) {
-            throw "Packaged version mismatch: expected $env:VERSION, got $actual"
+          $env:GHOSTY_EXPECTED_VERSION = $env:VERSION
+          $process = Start-Process -FilePath $exe -ArgumentList "--package-smoke-test" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Packaged Windows smoke failed with exit code $($process.ExitCode)."
           }
 
       - name: Install Inno Setup
