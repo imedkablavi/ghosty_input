@@ -16,19 +16,34 @@
 - Persistent logs intentionally exclude camera frames and typed content.
 - Runtime workers stop after repeated unexpected internal errors instead of producing an unbounded error loop.
 - Window shutdown no longer claims the engine is stopped while the camera worker is still alive.
+- Input/backend and engine shutdown now use best-effort resource cleanup so one release failure does not prevent remaining cameras, trackers, or virtual-input resources from being closed.
 - Old absolute `pinch_threshold` configuration is intentionally discarded because it cannot be safely converted to the newer palm-normalized pinch ratio.
+
+### Verified updates
+- Added automatic packaged-build update checks against the official GitHub Releases feed.
+- Added `auto`, `stable`, and `alpha` release channels. Alpha builds on `auto` receive newer Alpha releases and future stable releases.
+- Added `--check-update`, `--update`, and `--update-channel` CLI controls.
+- Update packages are restricted to this repository's Release download path and verified against platform SHA-256 manifests before installation.
+- Linux `.deb` installs use a PolicyKit privilege prompt while the application remains a normal desktop-user process.
+- Linux portable builds can replace themselves after exit using a verified archive, temporary staging directory, and rollback copy.
+- Windows builds launch the verified Inno Setup installer and exit cleanly for replacement.
+- Added archive path/special-file validation for portable Linux updates.
+- Added a release publisher workflow that creates/updates a GitHub Release only for accepted `v*` tags and uploads successful Linux/Windows distribution artifacts.
+- The updater ignores newly created Releases until the package and checksum required by the current platform are both present.
 
 ### Linux distribution
 - Alpha version is consistent as `0.6.0a1` across Python metadata, Linux packages, Windows installer metadata, and artifact names.
-- Debian package now declares the Linux/X11/XCB runtime libraries required by the packaged Qt application.
+- Debian package declares the Linux/X11/XCB runtime libraries required by the packaged Qt application.
 - Linux CI validates `libqxcb.so` with `ldd` and fails on unresolved shared libraries.
-- Source, packaged portable runtime, and extracted Debian payload validate `--preflight`, `--diagnose`, `--camera-diagnose`, `--log-path`, version output, and Qt offscreen startup.
+- Source, packaged portable runtime, and extracted Debian payload validate `--preflight`, `--diagnose`, `--camera-diagnose`, `--log-path`, version output, updater package smoke, and Qt offscreen startup.
+- The generated portable archive is passed through the same archive-safety validator used by the self-updater before it can be published.
 - Alpha testing instructions ship inside the portable and Debian packages as `README-ALPHA.md`.
 
 ### Tests
 - Added coverage for config quarantine/recovery and legacy pinch migration.
 - Added Alpha preflight tests for missing cameras, Wayland/uinput readiness, dual-camera conflicts, calibration warnings, and real-stream probe failures.
 - Added duplicate-instance lock/reacquire tests.
+- Added updater tests for semantic Alpha/stable ordering, channel selection, incomplete releases, package-type detection, SHA-256 rejection, and portable archive traversal rejection.
 
 ## 0.5.1 - Linux camera reliability hotfix
 
@@ -46,7 +61,7 @@
 - Keeps the first validated frame so startup verification does not discard a good frame.
 
 ### Diagnostics and packaging
-- Added `--camera-diagnose` (Camera Doctor) to report V4L2 capability, access, driver, bus, backend, negotiated resolution, FPS, and real-frame probe result.
+- Added `--camera-diagnose` (Camera Doctor) to report V4L2 capability, access, driver, bus, backend, negotiated resolution, FPS, and real frame probe result.
 - Expanded `--diagnose` with capture/non-capture/unknown V4L2 counts and OpenCV video backends.
 - Linux source, packaged binary, and extracted `.deb` run Camera Doctor as a packaging gate.
 - Linux packaging uses a single release-version variable to keep archive, Debian metadata, and artifact names consistent.
