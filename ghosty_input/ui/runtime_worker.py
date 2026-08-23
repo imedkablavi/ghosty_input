@@ -29,8 +29,16 @@ class RuntimeThread(QThread):
         self.config = AppConfig.from_dict(asdict(config))
         self._commands: SimpleQueue[tuple[str, object]] = SimpleQueue()
 
-    def request_calibration(self, points: list[list[float]]) -> None:
-        self._commands.put(("calibration", [point[:] for point in points]))
+    def request_calibration(
+        self,
+        points: list[list[float]],
+        validation_points: list[list[float]] | None = None,
+    ) -> None:
+        payload = {
+            "points": [point[:] for point in points],
+            "validation": [point[:] for point in (validation_points or [])],
+        }
+        self._commands.put(("calibration", payload))
 
     def stop(self, timeout_ms: int = 3000) -> bool:
         """Request cooperative shutdown and report whether the thread stopped."""
@@ -45,10 +53,11 @@ class RuntimeThread(QThread):
             except Empty:
                 return
             if command == "calibration":
-                engine.set_calibration(payload)
-                quality = engine.calibration.quality_with_validation(
-                    engine.config.calibration_validation_points
-                )
+                points = payload["points"]
+                validation = payload["validation"]
+                engine.config.calibration_validation_points = validation
+                engine.set_calibration(points)
+                quality = engine.calibration.quality_with_validation(validation)
                 self.calibration_applied.emit(quality)
 
     def run(self) -> None:
