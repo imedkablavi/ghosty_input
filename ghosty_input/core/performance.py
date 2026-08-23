@@ -30,7 +30,8 @@ class CameraSoakResult:
 def current_rss_bytes() -> int:
     if sys.platform.startswith("linux"):
         try:
-            resident_pages = int(open("/proc/self/statm", encoding="utf-8").read().split()[1])
+            with open("/proc/self/statm", encoding="utf-8") as handle:
+                resident_pages = int(handle.read().split()[1])
             return resident_pages * int(os.sysconf("SC_PAGE_SIZE"))
         except (OSError, ValueError, IndexError):
             pass
