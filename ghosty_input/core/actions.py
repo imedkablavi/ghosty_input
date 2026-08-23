@@ -37,7 +37,12 @@ def _alpha(cutoff: float, dt: float) -> float:
 class OneEuroAxis:
     """Adaptive low-pass filter: stable at rest, responsive during fast motion."""
 
-    def __init__(self, min_cutoff: float = 1.25, beta: float = 0.045, d_cutoff: float = 1.0) -> None:
+    def __init__(
+        self,
+        min_cutoff: float = 1.25,
+        beta: float = 0.045,
+        d_cutoff: float = 1.0,
+    ) -> None:
         self.min_cutoff = min_cutoff
         self.beta = beta
         self.d_cutoff = d_cutoff
@@ -68,7 +73,15 @@ class OneEuroAxis:
 
 
 class InputController:
-    def __init__(self, *, smoothing: float = 0.28, deadzone_px: float = 1.5, backend: str = "auto", screen_size: tuple[int, int] | None = None, backend_instance: InputBackend | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        smoothing: float = 0.28,
+        deadzone_px: float = 1.5,
+        backend: str = "auto",
+        screen_size: tuple[int, int] | None = None,
+        backend_instance: InputBackend | None = None,
+    ) -> None:
         min_cutoff = 0.8 + (1.0 - smoothing) * 1.7
         beta = 0.025 + (1.0 - smoothing) * 0.055
         self._filter_x = OneEuroAxis(min_cutoff=min_cutoff, beta=beta)
@@ -128,5 +141,18 @@ class InputController:
         self.backend.hotkey(*keys)
 
     def close(self) -> None:
-        self.drag_end()
-        self.backend.close()
+        errors: list[Exception] = []
+        if self.state.dragging:
+            try:
+                self.backend.mouse_up("left")
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                self.state.dragging = False
+        try:
+            self.backend.close()
+        except Exception as exc:
+            errors.append(exc)
+        if errors:
+            summary = "; ".join(f"{type(exc).__name__}: {exc}" for exc in errors)
+            raise RuntimeError(f"Input controller cleanup failed: {summary}") from errors[0]
