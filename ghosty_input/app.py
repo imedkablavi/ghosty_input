@@ -26,6 +26,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="probe Linux V4L2 camera capabilities and attempt a real frame capture",
     )
     parser.add_argument(
+        "--preflight",
+        action="store_true",
+        help="check whether the saved configuration is ready for alpha runtime testing",
+    )
+    parser.add_argument(
+        "--preflight-probe-camera",
+        action="store_true",
+        help="with --preflight, also open the selected camera and require a real frame",
+    )
+    parser.add_argument(
+        "--log-path",
+        action="store_true",
+        help="print the persistent alpha runtime log path and exit",
+    )
+    parser.add_argument(
         "--minimized",
         action="store_true",
         help="start the Linux Control Center minimized to the system tray when available",
@@ -102,6 +117,15 @@ def main(argv: list[str] | None = None) -> int:
         print(__version__)
         return 0
 
+    from ghosty_input.core.logging_setup import configure_logging, get_logger, log_path
+
+    configure_logging()
+    logger = get_logger("app")
+
+    if args.log_path:
+        print(log_path())
+        return 0
+
     if args.diagnose:
         from ghosty_input.core.system_info import diagnostic_report
 
@@ -113,6 +137,21 @@ def main(argv: list[str] | None = None) -> int:
 
         print(camera_diagnostic_report(probe_streams=True))
         return 0
+
+    if args.preflight:
+        from ghosty_input.config import load_config_state
+        from ghosty_input.core.preflight import run_preflight
+
+        state = load_config_state()
+        report = run_preflight(
+            state.config,
+            probe_streams=args.preflight_probe_camera,
+        )
+        if state.recovered:
+            backup = str(state.backup_path) if state.backup_path else "backup unavailable"
+            print(f"Config recovery: invalid config quarantined ({backup})")
+        print(report.render())
+        return 0 if report.ready else 2
 
     try:
         if _handle_linux_desktop_actions(args):
@@ -145,7 +184,10 @@ def main(argv: list[str] | None = None) -> int:
 
         return run_ui()
     except KeyboardInterrupt:
+        logger.info("application interrupted by user")
         return 130
     except Exception as exc:
+        logger.exception("application failed to start")
         print(f"Ghosty Input failed to start: {exc}", file=sys.stderr)
+        print(f"Runtime log: {log_path()}", file=sys.stderr)
         return 1
