@@ -50,6 +50,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=argparse.SUPPRESS,
     )
+    parser.add_argument(
+        "--package-smoke-test",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     desktop = parser.add_mutually_exclusive_group()
     desktop.add_argument(
         "--install-desktop",
@@ -149,6 +154,43 @@ def _run_linux_ui_smoke_test() -> int:
     return 0
 
 
+def _run_package_smoke_test() -> int:
+    """Validate a frozen GUI executable using only its process exit code.
+
+    Windows ``--windowed`` PyInstaller executables do not have a console stdout,
+    so distribution CI cannot reliably validate them by capturing ``--version``.
+    The optional expected version is supplied by the build environment and a
+    small offscreen Qt construction verifies that the packaged GUI imports.
+    """
+
+    import os
+
+    from ghosty_input import __version__
+    from ghosty_input.config import AppConfig
+
+    expected = os.environ.get("GHOSTY_EXPECTED_VERSION", "").strip()
+    if expected and __version__ != expected:
+        return 3
+
+    AppConfig().validate()
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication([])
+    if platform.system() == "Linux":
+        from ghosty_input.ui.linux_window import LinuxWindow
+
+        window = LinuxWindow()
+        window.config.linux_close_to_tray = False
+    else:
+        from ghosty_input.ui.main_window import MainWindow
+
+        window = MainWindow()
+    window.close()
+    app.processEvents()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.version:
@@ -161,6 +203,9 @@ def main(argv: list[str] | None = None) -> int:
 
     configure_logging()
     logger = get_logger("app")
+
+    if args.package_smoke_test:
+        return _run_package_smoke_test()
 
     if args.log_path:
         print(log_path())
