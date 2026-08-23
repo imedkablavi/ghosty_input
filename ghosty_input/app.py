@@ -165,7 +165,9 @@ def _run_linux_ui_smoke_test() -> int:
     from PySide6.QtWidgets import QApplication
 
     import ghosty_input.ui.instance_lock as instance_lock
-    from ghosty_input.ui.linux_window import LinuxWindow
+    from ghosty_input.config import AppConfig
+    from ghosty_input.ui.onboarding import FirstRunWizard
+    from ghosty_input.ui.product_window import ProductLinuxWindow
 
     app = QApplication.instance() or QApplication([])
     with TemporaryDirectory(prefix="ghosty-alpha-smoke-") as temp:
@@ -188,16 +190,23 @@ def _run_linux_ui_smoke_test() -> int:
                 first.unlock()
             instance_lock.app_data_dir = original_data_dir
 
-    window = LinuxWindow()
+    wizard = FirstRunWizard(AppConfig())
+    if wizard.camera.count() < 1:
+        raise RuntimeError("first-run wizard did not render a camera choice")
+    wizard.close()
+
+    window = ProductLinuxWindow()
     window.config.linux_close_to_tray = False
+    if not hasattr(window, "capture_metric") or not hasattr(window, "gesture_button"):
+        raise RuntimeError("product reliability controls were not constructed")
     window.close()
     app.processEvents()
-    print("Linux UI + instance lock smoke test: ok")
+    print("Linux product UI + onboarding + instance lock smoke test: ok")
     return 0
 
 
 def _run_package_smoke_test() -> int:
-    """Validate a frozen GUI executable using only its process exit code."""
+    """Validate the actual packaged product UI using only its process exit code."""
 
     import os
 
@@ -217,21 +226,36 @@ def _run_package_smoke_test() -> int:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
 
+    from ghosty_input.ui.onboarding import FirstRunWizard
     from ghosty_input.ui.startup_update import maybe_run_startup_update
 
     if not callable(maybe_run_startup_update):
         return 6
 
     app = QApplication.instance() or QApplication([])
-    if platform.system() == "Linux":
-        from ghosty_input.ui.linux_window import LinuxWindow
 
-        window = LinuxWindow()
+    # Exercise first-run construction without executing the modal dialog. Device
+    # enumeration is allowed here, but the wizard deliberately never opens a
+    # camera stream.
+    wizard = FirstRunWizard(AppConfig())
+    if wizard.camera.count() < 1:
+        wizard.close()
+        return 7
+    wizard.close()
+
+    if platform.system() == "Linux":
+        from ghosty_input.ui.product_window import ProductLinuxWindow
+
+        window = ProductLinuxWindow()
         window.config.linux_close_to_tray = False
     else:
-        from ghosty_input.ui.main_window import MainWindow
+        from ghosty_input.ui.product_window import ProductMainWindow
 
-        window = MainWindow()
+        window = ProductMainWindow()
+
+    if not hasattr(window, "capture_metric") or not hasattr(window, "gesture_button"):
+        window.close()
+        return 8
     window.close()
     app.processEvents()
     return 0
