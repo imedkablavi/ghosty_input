@@ -34,6 +34,25 @@ ghosty-input --log-path
 
 Ghosty Input does not write camera frames or typed text to the runtime log.
 
+## Verified updates
+
+Packaged Alpha builds can check the official GitHub Releases channel:
+
+```bash
+ghosty-input --check-update
+ghosty-input --update
+```
+
+Startup update checks are enabled by default. Alpha builds on the `auto` channel accept newer Alpha builds and future stable releases. Ghosty asks before downloading/installing and verifies the release package with SHA-256 first.
+
+Update installation supports:
+
+- Linux `.deb` through a PolicyKit privilege prompt;
+- Linux portable packages through a verified self-replacement helper with rollback during the swap;
+- Windows through the verified Inno Setup installer.
+
+See `docs/UPDATES.md` for the trust model and publishing flow.
+
 ## Alpha acceptance sequence
 
 1. Launch Ghosty Input once. Launch it a second time and confirm the second instance is rejected.
@@ -48,6 +67,7 @@ Ghosty Input does not write camera frames or typed text to the runtime log.
 10. Type a known 200-character sample and record wrong, missing, or duplicated characters.
 11. Run continuously for 30 minutes. Stop and restart the engine at least three times.
 12. Close the application while the engine is active and confirm it does not crash or leave a stuck drag state.
+13. After a newer Alpha release exists, run `--check-update`, confirm the correct package is selected, complete one update, and confirm the application restarts on the new version.
 
 ## What to report
 
