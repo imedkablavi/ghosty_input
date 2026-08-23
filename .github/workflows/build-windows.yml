@@ -97,7 +97,7 @@ jobs:
             $hash = (Get-FileHash $target -Algorithm SHA256).Hash.ToLower()
             "$hash  $(Split-Path $target -Leaf)"
           }
-          $lines | Set-Content -Path "dist/SHA256SUMS.txt" -Encoding ascii
+          $lines | Set-Content -Path "dist/SHA256SUMS-Windows.txt" -Encoding ascii
 
       - uses: actions/upload-artifact@v4
         with:
@@ -106,4 +106,4 @@ jobs:
           path: |
             dist/GhostyInput-Windows-x64-v${{ env.VERSION }}.zip
             dist/GhostyInputSetup.exe
-            dist/SHA256SUMS.txt
+            dist/SHA256SUMS-Windows.txt
