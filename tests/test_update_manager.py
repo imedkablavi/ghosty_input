@@ -155,10 +155,13 @@ def test_portable_archive_allows_internal_relative_symlink(tmp_path: Path):
     update_manager._validate_portable_archive(archive_path)
 
 
-def test_portable_update_script_smoke_tests_before_deleting_backup():
+def test_portable_update_script_smoke_tests_before_deleting_current_backup():
     script = update_manager._portable_update_script()
-    smoke = '--package-smoke-test'
+    smoke = "--package-smoke-test"
+    final_backup_delete = 'rm -rf -- "$backup"'
     assert smoke in script
     assert 'GHOSTY_EXPECTED_VERSION="$version"' in script
-    assert script.index(smoke) < script.index('rm -rf -- "$backup"')
+    # The first deletion only removes a stale backup left by an older attempt.
+    # The final deletion must happen only after the new binary passes smoke.
+    assert script.index(smoke) < script.rindex(final_backup_delete)
     assert 'mv -- "$backup" "$target"' in script
