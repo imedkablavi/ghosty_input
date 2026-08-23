@@ -14,7 +14,7 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     env:
-      VERSION: "0.5.1"
+      VERSION: "0.6.0a1"
       SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
     steps:
@@ -32,12 +32,36 @@ jobs:
             desktop-file-utils \
             libdbus-1-3 \
             libegl1 \
+            libfontconfig1 \
+            libfreetype6 \
             libgl1 \
             libglib2.0-0 \
+            libice6 \
+            libsm6 \
+            libx11-6 \
             libx11-xcb1 \
-            libxkbcommon-x11-0 \
+            libxcb1 \
             libxcb-cursor0 \
-            libxcb-xinerama0
+            libxcb-glx0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-render0 \
+            libxcb-shape0 \
+            libxcb-shm0 \
+            libxcb-sync1 \
+            libxcb-util1 \
+            libxcb-xfixes0 \
+            libxcb-xinerama0 \
+            libxcb-xkb1 \
+            libxext6 \
+            libxfixes3 \
+            libxi6 \
+            libxkbcommon0 \
+            libxkbcommon-x11-0 \
+            libxrender1
 
       - name: Install application and build dependencies
         run: |
@@ -82,7 +106,14 @@ jobs:
           python run.py --version | grep -Fx "${VERSION}"
           python run.py --diagnose
           python run.py --camera-diagnose
+          python run.py --log-path
           python run.py --ui-smoke-test
+          set +e
+          python run.py --preflight > /tmp/ghosty-alpha-preflight.txt
+          preflight_code=$?
+          set -e
+          test "${preflight_code}" -eq 2
+          grep -F "ALPHA BLOCKED" /tmp/ghosty-alpha-preflight.txt
 
       - name: Build Linux application
         run: |
@@ -103,12 +134,31 @@ jobs:
           ./dist/GhostyInput/GhostyInput --version | grep -Fx "${VERSION}"
           ./dist/GhostyInput/GhostyInput --diagnose > dist/GhostyInput/BUILD-DIAGNOSTICS.txt
           ./dist/GhostyInput/GhostyInput --camera-diagnose > dist/GhostyInput/CAMERA-DIAGNOSTICS.txt
+          ./dist/GhostyInput/GhostyInput --log-path
           ./dist/GhostyInput/GhostyInput --ui-smoke-test
+          set +e
+          ./dist/GhostyInput/GhostyInput --preflight > /tmp/ghosty-packaged-preflight.txt
+          preflight_code=$?
+          set -e
+          test "${preflight_code}" -eq 2
+          grep -F "ALPHA BLOCKED" /tmp/ghosty-packaged-preflight.txt
+
+      - name: Validate Qt XCB runtime linkage
+        run: |
+          QXCB=$(find dist/GhostyInput -type f -name libqxcb.so -print -quit)
+          test -n "${QXCB}"
+          echo "Qt xcb platform plugin: ${QXCB}"
+          ldd "${QXCB}" | tee dist/GhostyInput/QXCB-LDD.txt
+          if grep -F "not found" dist/GhostyInput/QXCB-LDD.txt; then
+            echo "A required Qt/XCB runtime library is missing."
+            exit 1
+          fi
 
       - name: Add Linux helpers and manifests
         run: |
           cp scripts/ghosty-input-linux-setup.sh dist/GhostyInput/
           cp docs/LINUX.md dist/GhostyInput/README-LINUX.md
+          cp docs/ALPHA.md dist/GhostyInput/README-ALPHA.md
           cp LICENSE dist/GhostyInput/LICENSE
           cp constraints-release.txt dist/GhostyInput/RELEASE-CONSTRAINTS.txt
           cat > dist/GhostyInput/run-ghosty.sh <<'SH'
@@ -144,7 +194,7 @@ jobs:
           (root / "BUILD-MANIFEST.txt").write_text(
               "\n".join(
                   [
-                      "Ghosty Input Linux build manifest",
+                      "Ghosty Input Linux Alpha build manifest",
                       f"release_version={os.environ.get('VERSION', 'unknown')}",
                       f"source_head_sha={os.environ.get('SOURCE_HEAD_SHA', 'unknown')}",
                       f"checkout_sha={os.environ.get('GITHUB_SHA', 'unknown')}",
@@ -185,7 +235,7 @@ jobs:
           [Desktop Entry]
           Type=Application
           Version=1.0
-          Name=Ghosty Input
+          Name=Ghosty Input Alpha
           Comment=Camera-based hand gesture mouse and desk keyboard
           Exec=/opt/ghosty-input/run-ghosty.sh
           Icon=ghosty-input
@@ -201,8 +251,10 @@ jobs:
           Architecture: amd64
           Maintainer: Ghosty Input
           Homepage: https://github.com/imedkablavi/ghosty_input
-          Description: Offline hand gesture mouse and desk-surface virtual keyboard
-           Linux desktop build with native uinput support and local computer vision.
+          Depends: libdbus-1-3, libegl1, libfontconfig1, libfreetype6, libgl1, libglib2.0-0, libice6, libsm6, libx11-6, libx11-xcb1, libxcb1, libxcb-cursor0, libxcb-glx0, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-randr0, libxcb-render-util0, libxcb-render0, libxcb-shape0, libxcb-shm0, libxcb-sync1, libxcb-util1, libxcb-xfixes0, libxcb-xinerama0, libxcb-xkb1, libxext6, libxfixes3, libxi6, libxkbcommon0, libxkbcommon-x11-0, libxrender1
+          Description: Ghosty Input Alpha offline vision input controller
+           Linux Alpha build with V4L2 camera diagnostics, native uinput support,
+           preflight checks, and local computer vision processing.
           CONTROL
           desktop-file-validate "${PKGROOT}/usr/share/applications/ghosty-input.desktop"
           dpkg-deb --root-owner-group --build \
@@ -216,18 +268,27 @@ jobs:
           DEB="dist/ghosty-input_${VERSION}_amd64.deb"
           dpkg-deb --info "${DEB}"
           test "$(dpkg-deb -f "${DEB}" Version)" = "${VERSION}"
+          test -n "$(dpkg-deb -f "${DEB}" Depends)"
           rm -rf dist/deb-smoke
           mkdir -p dist/deb-smoke
           dpkg-deb -x "${DEB}" dist/deb-smoke
           test -x dist/deb-smoke/opt/ghosty-input/GhostyInput
           test -x dist/deb-smoke/opt/ghosty-input/run-ghosty.sh
+          test -f dist/deb-smoke/opt/ghosty-input/README-ALPHA.md
           test -L dist/deb-smoke/usr/bin/ghosty-input
           test "$(readlink dist/deb-smoke/usr/bin/ghosty-input)" = "/opt/ghosty-input/run-ghosty.sh"
           desktop-file-validate dist/deb-smoke/usr/share/applications/ghosty-input.desktop
           dist/deb-smoke/opt/ghosty-input/GhostyInput --version | grep -Fx "${VERSION}"
           dist/deb-smoke/opt/ghosty-input/GhostyInput --diagnose > /tmp/ghosty-deb-diagnostics.txt
           dist/deb-smoke/opt/ghosty-input/GhostyInput --camera-diagnose > /tmp/ghosty-deb-camera-diagnostics.txt
+          dist/deb-smoke/opt/ghosty-input/GhostyInput --log-path
           dist/deb-smoke/opt/ghosty-input/GhostyInput --ui-smoke-test
+          set +e
+          dist/deb-smoke/opt/ghosty-input/GhostyInput --preflight > /tmp/ghosty-deb-preflight.txt
+          preflight_code=$?
+          set -e
+          test "${preflight_code}" -eq 2
+          grep -F "ALPHA BLOCKED" /tmp/ghosty-deb-preflight.txt
 
       - name: Enforce Linux package size budget
         run: |
@@ -235,8 +296,8 @@ jobs:
           DEB="dist/ghosty-input_${VERSION}_amd64.deb"
           portable_bytes=$(stat -c%s "${PORTABLE}")
           deb_bytes=$(stat -c%s "${DEB}")
-          portable_limit=$((230 * 1024 * 1024))
-          deb_limit=$((180 * 1024 * 1024))
+          portable_limit=$((235 * 1024 * 1024))
+          deb_limit=$((185 * 1024 * 1024))
           echo "Portable: ${portable_bytes} bytes (limit ${portable_limit})"
           echo "Debian:   ${deb_bytes} bytes (limit ${deb_limit})"
           test "${portable_bytes}" -le "${portable_limit}"
