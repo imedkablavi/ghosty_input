@@ -12,24 +12,29 @@ def instance_lock_path() -> Path:
 
 
 def acquire_instance_lock() -> tuple[QLockFile | None, str]:
-    """Acquire a long-lived desktop instance lock.
-
-    A second Ghosty Input process can otherwise race for the same V4L2 camera
-    and uinput device, producing confusing camera-busy failures during alpha
-    testing.
-    """
+    """Acquire a long-lived desktop instance lock."""
 
     path = instance_lock_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return None, f"Cannot create the Ghosty Input data directory: {exc}"
+
     lock = QLockFile(str(path))
     lock.setStaleLockTime(0)
     if lock.tryLock(50):
         return lock, ""
 
+    error = lock.error()
+    if error == QLockFile.LockError.PermissionError:
+        return None, f"Cannot create the instance lock at {path}. Check directory permissions."
+    if error == QLockFile.LockError.UnknownError:
+        return None, f"Cannot acquire the Ghosty Input instance lock at {path}."
+
     try:
         pid, hostname, appname = lock.getLockInfo()
     except Exception:
-        return None, "another Ghosty Input instance is already running"
+        return None, "Another Ghosty Input instance is already running."
     owner = appname or "Ghosty Input"
     location = f" on {hostname}" if hostname else ""
-    return None, f"{owner} is already running (PID {pid}{location})"
+    return None, f"{owner} is already running (PID {pid}{location})."
