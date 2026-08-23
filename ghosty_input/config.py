@@ -66,6 +66,7 @@ class AppConfig:
 
     pinch_engage_ratio: float = 0.31
     pinch_release_ratio: float = 0.42
+    gesture_calibrated: bool = False
     scroll_sensitivity: float = 4.0
 
     keyboard_activation_mode: str = "pinch"
@@ -76,6 +77,8 @@ class AppConfig:
     keyboard_edge_inset: float = 0.012
 
     calibration_points: list[list[float]] = field(default_factory=list)
+    calibration_validation_points: list[list[float]] = field(default_factory=list)
+    onboarding_complete: bool = False
 
     # Compatibility with v0.2 config files. New code uses pointer_smoothing.
     # The old pinch_threshold was an absolute landmark distance and cannot be
@@ -141,6 +144,16 @@ class AppConfig:
             raise ValueError("Keyboard edge inset must be between 0 and 0.08.")
         if self.calibration_points and len(self.calibration_points) != 4:
             raise ValueError("Calibration requires exactly four points.")
+        if len(self.calibration_validation_points) > 12:
+            raise ValueError("Calibration validation accepts at most 12 hold-out points.")
+        for row in self.calibration_validation_points:
+            if not isinstance(row, (list, tuple)) or len(row) != 4:
+                raise ValueError(
+                    "Calibration validation points must be [observed_x, observed_y, expected_x, expected_y]."
+                )
+            values = [float(value) for value in row]
+            if any(value < -0.05 or value > 1.05 for value in values):
+                raise ValueError("Calibration validation points are outside the normalized plane.")
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "AppConfig":
