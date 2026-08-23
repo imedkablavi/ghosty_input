@@ -35,7 +35,8 @@ class CameraModeProbe:
     def actual(self) -> str:
         if not self.ok:
             return "unavailable"
-        return f"{self.actual_width}x{self.actual_height}@{self.actual_fps:.1f}"
+        fps = f"{self.actual_fps:.1f}" if self.actual_fps > 0.0 else "unknown"
+        return f"{self.actual_width}x{self.actual_height}@{fps}"
 
 
 def probe_camera_modes(
@@ -68,8 +69,16 @@ def probe_camera_modes(
             frame = camera.read()
             del frame
             info = camera.info
-            fps_ok = info.fps <= 0.0 or info.fps >= fps * 0.85
-            exact = info.width == width and info.height == height and fps_ok
+            resolution_exact = info.width == width and info.height == height
+            fps_known = info.fps > 0.0
+            fps_ok = fps_known and info.fps >= fps * 0.85
+            exact = resolution_exact and fps_ok
+            if exact:
+                status = "exact"
+            elif resolution_exact and not fps_known:
+                status = "resolution exact; FPS unavailable"
+            else:
+                status = "backend negotiated fallback"
             results.append(
                 CameraModeProbe(
                     width,
@@ -81,7 +90,7 @@ def probe_camera_modes(
                     actual_fps=info.fps,
                     backend=info.backend,
                     exact=exact,
-                    status="exact" if exact else "backend negotiated fallback",
+                    status=status,
                 )
             )
         except Exception as exc:
