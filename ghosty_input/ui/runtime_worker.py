@@ -6,8 +6,8 @@ from queue import Empty, SimpleQueue
 from PySide6.QtCore import QThread, Signal
 
 from ghosty_input.config import AppConfig
-from ghosty_input.core.engine import GhostyEngine
 from ghosty_input.core.logging_setup import get_logger
+from ghosty_input.core.product_engine import ProductGhostyEngine
 
 
 logger = get_logger("runtime_worker")
@@ -38,7 +38,7 @@ class RuntimeThread(QThread):
         self.requestInterruption()
         return self.wait(max(0, int(timeout_ms)))
 
-    def _drain_commands(self, engine: GhostyEngine) -> None:
+    def _drain_commands(self, engine: ProductGhostyEngine) -> None:
         while True:
             try:
                 command, payload = self._commands.get_nowait()
@@ -46,12 +46,15 @@ class RuntimeThread(QThread):
                 return
             if command == "calibration":
                 engine.set_calibration(payload)
-                self.calibration_applied.emit(engine.calibration.quality_score)
+                quality = engine.calibration.quality_with_validation(
+                    engine.config.calibration_validation_points
+                )
+                self.calibration_applied.emit(quality)
 
     def run(self) -> None:
-        engine: GhostyEngine | None = None
+        engine: ProductGhostyEngine | None = None
         try:
-            engine = GhostyEngine(self.config)
+            engine = ProductGhostyEngine(self.config)
             engine.start()
             logger.info(
                 "runtime started camera=%s backend=%s",
