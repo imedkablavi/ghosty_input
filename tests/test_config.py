@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from ghosty_input.config import AppConfig, load_config, save_config
+from ghosty_input.config import AppConfig, load_config, load_config_state, save_config
 
 
 def test_config_roundtrip(tmp_path: Path):
@@ -45,6 +45,38 @@ def test_old_smoothing_setting_migrates():
     cfg = AppConfig.from_dict({"smoothing": 0.44})
     assert cfg.pointer_smoothing == 0.44
     assert cfg.smoothing is None
+
+
+def test_old_absolute_pinch_threshold_is_discarded():
+    cfg = AppConfig.from_dict({"pinch_threshold": 0.055})
+    assert cfg.pinch_threshold is None
+    assert cfg.pinch_engage_ratio == AppConfig().pinch_engage_ratio
+
+
+def test_invalid_config_is_quarantined_instead_of_silently_lost(tmp_path: Path):
+    path = tmp_path / "config.json"
+    path.write_text('{"camera_fps": "broken"', encoding="utf-8")
+
+    state = load_config_state(path)
+
+    assert state.recovered is True
+    assert state.config == AppConfig()
+    assert state.backup_path is not None
+    assert state.backup_path.exists()
+    assert not path.exists()
+    assert state.backup_path.read_text(encoding="utf-8") == '{"camera_fps": "broken"'
+    assert "JSONDecodeError" in state.error
+
+
+def test_non_object_config_is_quarantined(tmp_path: Path):
+    path = tmp_path / "config.json"
+    path.write_text("[]", encoding="utf-8")
+
+    state = load_config_state(path)
+
+    assert state.recovered is True
+    assert state.backup_path is not None
+    assert "TypeError" in state.error
 
 
 def test_invalid_activation_mode_is_rejected():
