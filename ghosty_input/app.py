@@ -36,6 +36,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="with --preflight, also open the selected camera and require a real frame",
     )
     parser.add_argument(
+        "--check-update",
+        action="store_true",
+        help="check GitHub Releases for a newer compatible Ghosty Input build",
+    )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help="download, verify, and launch the newest compatible update",
+    )
+    parser.add_argument(
+        "--update-channel",
+        choices=("auto", "stable", "alpha"),
+        help="override the saved update channel for --check-update or --update",
+    )
+    parser.add_argument(
         "--log-path",
         action="store_true",
         help="print the persistent alpha runtime log path and exit",
@@ -64,7 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     desktop.add_argument(
         "--remove-desktop",
         action="store_true",
-        help="remove the per-user Linux application-menu entry",
+        help="remove a per-user Linux application-menu entry",
     )
     autostart = parser.add_mutually_exclusive_group()
     autostart.add_argument(
@@ -155,22 +170,21 @@ def _run_linux_ui_smoke_test() -> int:
 
 
 def _run_package_smoke_test() -> int:
-    """Validate a frozen GUI executable using only its process exit code.
-
-    Windows ``--windowed`` PyInstaller executables do not have a console stdout,
-    so distribution CI cannot reliably validate them by capturing ``--version``.
-    The optional expected version is supplied by the build environment and a
-    small offscreen Qt construction verifies that the packaged GUI imports.
-    """
+    """Validate a frozen GUI executable using only its process exit code."""
 
     import os
 
     from ghosty_input import __version__
     from ghosty_input.config import AppConfig
+    from ghosty_input.core.update_manager import _normalize_tag, installation_kind
 
     expected = os.environ.get("GHOSTY_EXPECTED_VERSION", "").strip()
     if expected and __version__ != expected:
         return 3
+    if _normalize_tag("v0.6.0-alpha.2") != "0.6.0a2":
+        return 4
+    if installation_kind() == "unsupported":
+        return 5
 
     AppConfig().validate()
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -188,6 +202,39 @@ def _run_package_smoke_test() -> int:
         window = MainWindow()
     window.close()
     app.processEvents()
+    return 0
+
+
+def _handle_update_command(args: argparse.Namespace) -> int | None:
+    if not args.check_update and not args.update:
+        return None
+
+    from ghosty_input.config import load_config
+    from ghosty_input.core.update_manager import (
+        check_for_update,
+        download_verified_update,
+        launch_installer,
+        updater_environment,
+    )
+
+    config = load_config()
+    channel = args.update_channel or config.update_channel
+    info = check_for_update(channel=channel)
+    if info is None:
+        print(f"Ghosty Input is up to date · channel={channel} · {updater_environment()}")
+        return 0
+
+    print(
+        f"Update available: {info.current_version} -> {info.version} · "
+        f"{info.asset.name} · channel={channel}"
+    )
+    if not args.update:
+        return 0
+
+    package = download_verified_update(info)
+    print(f"Verified update: {package}")
+    launch_installer(package, version=info.version)
+    print("Update installer launched. Ghosty Input will exit now.")
     return 0
 
 
@@ -239,6 +286,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if report.ready else 2
 
     try:
+        update_result = _handle_update_command(args)
+        if update_result is not None:
+            return update_result
+
         if _handle_linux_desktop_actions(args):
             return 0
 
@@ -246,6 +297,12 @@ def main(argv: list[str] | None = None) -> int:
             if platform.system() != "Linux":
                 return 0
             return _run_linux_ui_smoke_test()
+
+        from ghosty_input.config import load_config
+        from ghosty_input.ui.startup_update import maybe_run_startup_update
+
+        if maybe_run_startup_update(load_config()):
+            return 0
 
         if platform.system() == "Linux":
             from ghosty_input.ui.linux_window import run_linux_ui
