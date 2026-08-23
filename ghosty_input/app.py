@@ -26,6 +26,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="probe Linux V4L2 camera capabilities and attempt a real frame capture",
     )
     parser.add_argument(
+        "--camera-modes",
+        action="store_true",
+        help="probe common resolution/FPS modes on the saved front camera",
+    )
+    parser.add_argument(
+        "--camera-soak",
+        type=float,
+        metavar="SECONDS",
+        help="run a camera-only CPU/RAM/drop/latency soak test without input injection",
+    )
+    parser.add_argument(
         "--preflight",
         action="store_true",
         help="check whether the saved configuration is ready for alpha runtime testing",
@@ -295,6 +306,10 @@ def _schedule_automatic_update_check() -> None:
 
     app = QApplication.instance() or QApplication([])
     config = load_config()
+    # Do not let a startup network check interrupt the first-run local setup
+    # wizard. Automatic checks resume normally from the next launch.
+    if not config.onboarding_complete:
+        return
 
     def run_check() -> None:
         if maybe_run_startup_update(config):
@@ -335,6 +350,28 @@ def main(argv: list[str] | None = None) -> int:
         print(camera_diagnostic_report(probe_streams=True))
         return 0
 
+    if args.camera_modes:
+        from ghosty_input.config import load_config
+        from ghosty_input.core.camera_modes import camera_mode_report
+
+        config = load_config()
+        print(camera_mode_report(config.front_camera))
+        return 0
+
+    if args.camera_soak is not None:
+        if args.camera_soak <= 0:
+            print("--camera-soak must be greater than zero seconds", file=sys.stderr)
+            return 2
+        from ghosty_input.config import load_config
+        from ghosty_input.core.performance import camera_soak_report
+
+        try:
+            print(camera_soak_report(load_config(), args.camera_soak))
+            return 0
+        except Exception as exc:
+            print(f"Camera soak failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
+
     if args.preflight:
         from ghosty_input.config import load_config_state
         from ghosty_input.core.preflight import run_preflight
@@ -369,13 +406,13 @@ def main(argv: list[str] | None = None) -> int:
         _schedule_automatic_update_check()
 
         if platform.system() == "Linux":
-            from ghosty_input.ui.linux_window import run_linux_ui
+            from ghosty_input.ui.product_window import run_product_linux_ui
 
-            return run_linux_ui(start_minimized=args.minimized)
+            return run_product_linux_ui(start_minimized=args.minimized)
 
-        from ghosty_input.ui.main_window import run_ui
+        from ghosty_input.ui.product_window import run_product_ui
 
-        return run_ui()
+        return run_product_ui()
     except KeyboardInterrupt:
         logger.info("application interrupted by user")
         return 130
