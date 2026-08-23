@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import hypot
 
 import cv2
 import numpy as np
@@ -63,7 +64,7 @@ class DeskCalibration:
 
     @property
     def quality_score(self) -> int:
-        """Heuristic 0-100 score for operator feedback."""
+        """Geometry-only 0-100 score for operator feedback."""
         if not self.ready:
             return 0
         source = np.asarray(self.points, dtype=np.float32)
@@ -125,3 +126,35 @@ class DeskCalibration:
             return False
         x, y = self.map(point)
         return -margin <= x <= 1 + margin and -margin <= y <= 1 + margin
+
+    def reprojection_error(self, validation_points: list[list[float]]) -> float | None:
+        """Return mean normalized hold-out mapping error.
+
+        Each row is ``[observed_x, observed_y, expected_x, expected_y]``. The
+        validation observations are intentionally not used to build the
+        homography, so this is meaningful feedback rather than the near-zero
+        corner round-trip error produced by evaluating the four fitted points.
+        """
+        if not validation_points:
+            return None
+        errors: list[float] = []
+        for row in validation_points:
+            if len(row) != 4:
+                raise ValueError(
+                    "Validation points must be [observed_x, observed_y, expected_x, expected_y]."
+                )
+            observed = (float(row[0]), float(row[1]))
+            expected = (float(row[2]), float(row[3]))
+            mapped = self.map(observed)
+            errors.append(hypot(mapped[0] - expected[0], mapped[1] - expected[1]))
+        return float(sum(errors) / len(errors))
+
+    def quality_with_validation(self, validation_points: list[list[float]]) -> int:
+        """Blend plane geometry with independent hold-out reprojection quality."""
+        error = self.reprojection_error(validation_points)
+        if error is None:
+            return self.quality_score
+        # <= 2% of the normalized keyboard plane is excellent; 8% or more is
+        # considered unusable for precise key selection.
+        validation_score = max(0.0, min(100.0, 100.0 * (1.0 - error / 0.08)))
+        return int(round(self.quality_score * 0.65 + validation_score * 0.35))
