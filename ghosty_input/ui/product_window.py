@@ -92,11 +92,25 @@ class ProductReliabilityMixin:
             f"release {self.config.pinch_release_ratio:.3f}. Raw samples are not persisted."
         )
 
+    def _desk_calibration(self) -> DeskCalibration | None:
+        if len(self.config.calibration_points) != 4:
+            return None
+        try:
+            return DeskCalibration(self.config.calibration_points)
+        except ValueError:
+            return None
+
     def _refresh_reprojection_state(self) -> None:
         if len(self.config.calibration_points) != 4:
             self.reprojection_state.setText("Desk plane is not calibrated.")
             return
-        calibration = DeskCalibration(self.config.calibration_points)
+        try:
+            calibration = DeskCalibration(self.config.calibration_points)
+        except ValueError as exc:
+            self.reprojection_state.setText(
+                f"INVALID saved desk calibration · {exc} · run a new 4-point calibration."
+            )
+            return
         error = calibration.reprojection_error(self.config.calibration_validation_points)
         if error is None:
             self.reprojection_state.setText(
@@ -174,6 +188,16 @@ class ProductReliabilityMixin:
                 "Complete the four-corner desk calibration first.",
             )
             return
+        try:
+            DeskCalibration(self.config.calibration_points)
+        except ValueError as exc:
+            self._refresh_reprojection_state()
+            QMessageBox.warning(
+                self,
+                "Calibration validation",
+                f"The saved desk calibration is invalid: {exc}\n\nRun a new 4-point calibration first.",
+            )
+            return
         self._validating_center = True
         self.reprojection_state.setText(
             "Click the PHYSICAL CENTER of the calibrated keyboard plane in the desk preview."
@@ -183,7 +207,13 @@ class ProductReliabilityMixin:
         if not self._validating_center:
             return
         self._validating_center = False
-        calibration = DeskCalibration(self.config.calibration_points)
+        try:
+            calibration = DeskCalibration(self.config.calibration_points)
+        except ValueError as exc:
+            self._refresh_reprojection_state()
+            if hasattr(self, "log"):
+                self.log.appendPlainText(f"Calibration validation rejected: {exc}")
+            return
         validation = [[float(x), float(y), 0.5, 0.5]]
         error = calibration.reprojection_error(validation)
         assert error is not None
