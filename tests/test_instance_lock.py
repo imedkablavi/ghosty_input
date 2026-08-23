@@ -1,3 +1,7 @@
+import pytest
+
+pytest.importorskip("PySide6", reason="QLockFile coverage runs in full distribution workflows")
+
 import ghosty_input.ui.instance_lock as instance_lock
 
 
