@@ -284,6 +284,25 @@ def _handle_update_command(args: argparse.Namespace) -> int | None:
     return 0
 
 
+def _schedule_automatic_update_check() -> None:
+    """Schedule updater work after the control center enters its event loop."""
+
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication
+
+    from ghosty_input.config import load_config
+    from ghosty_input.ui.startup_update import maybe_run_startup_update
+
+    app = QApplication.instance() or QApplication([])
+    config = load_config()
+
+    def run_check() -> None:
+        if maybe_run_startup_update(config):
+            app.quit()
+
+    QTimer.singleShot(1200, run_check)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.version:
@@ -347,11 +366,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             return _run_linux_ui_smoke_test()
 
-        from ghosty_input.config import load_config
-        from ghosty_input.ui.startup_update import maybe_run_startup_update
-
-        if maybe_run_startup_update(load_config()):
-            return 0
+        _schedule_automatic_update_check()
 
         if platform.system() == "Linux":
             from ghosty_input.ui.linux_window import run_linux_ui
