@@ -109,6 +109,7 @@ jobs:
           python run.py --camera-diagnose
           python run.py --log-path
           python run.py --ui-smoke-test
+          GHOSTY_EXPECTED_VERSION="${VERSION}" python run.py --package-smoke-test
           set +e
           python run.py --preflight > /tmp/ghosty-alpha-preflight.txt
           preflight_code=$?
@@ -137,6 +138,7 @@ jobs:
           ./dist/GhostyInput/GhostyInput --camera-diagnose > dist/GhostyInput/CAMERA-DIAGNOSTICS.txt
           ./dist/GhostyInput/GhostyInput --log-path
           ./dist/GhostyInput/GhostyInput --ui-smoke-test
+          GHOSTY_EXPECTED_VERSION="${VERSION}" ./dist/GhostyInput/GhostyInput --package-smoke-test
           set +e
           ./dist/GhostyInput/GhostyInput --preflight > /tmp/ghosty-packaged-preflight.txt
           preflight_code=$?
@@ -220,6 +222,15 @@ jobs:
       - name: Build portable archive
         run: |
           tar -C dist -czf "dist/GhostyInput-Linux-x86_64-v${VERSION}.tar.gz" GhostyInput
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from ghosty_input.core.update_manager import _validate_portable_archive
+
+          package = Path(f"dist/GhostyInput-Linux-x86_64-v{os.environ['VERSION']}.tar.gz")
+          _validate_portable_archive(package)
+          print(f"Portable self-update archive validation: ok · {package}")
+          PY
 
       - name: Build Debian package
         run: |
@@ -286,6 +297,7 @@ jobs:
           dist/deb-smoke/opt/ghosty-input/GhostyInput --camera-diagnose > /tmp/ghosty-deb-camera-diagnostics.txt
           dist/deb-smoke/opt/ghosty-input/GhostyInput --log-path
           dist/deb-smoke/opt/ghosty-input/GhostyInput --ui-smoke-test
+          GHOSTY_EXPECTED_VERSION="${VERSION}" dist/deb-smoke/opt/ghosty-input/GhostyInput --package-smoke-test
           set +e
           dist/deb-smoke/opt/ghosty-input/GhostyInput --preflight > /tmp/ghosty-deb-preflight.txt
           preflight_code=$?
