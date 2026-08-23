@@ -206,6 +206,11 @@ def _run_package_smoke_test() -> int:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
 
+    from ghosty_input.ui.startup_update import maybe_run_startup_update
+
+    if not callable(maybe_run_startup_update):
+        return 6
+
     app = QApplication.instance() or QApplication([])
     if platform.system() == "Linux":
         from ghosty_input.ui.linux_window import LinuxWindow
