@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       VERSION: "0.6.0a1"
+      DEB_VERSION: "0.6.0~a1"
       SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
     steps:
@@ -196,6 +197,7 @@ jobs:
                   [
                       "Ghosty Input Linux Alpha build manifest",
                       f"release_version={os.environ.get('VERSION', 'unknown')}",
+                      f"debian_version={os.environ.get('DEB_VERSION', 'unknown')}",
                       f"source_head_sha={os.environ.get('SOURCE_HEAD_SHA', 'unknown')}",
                       f"checkout_sha={os.environ.get('GITHUB_SHA', 'unknown')}",
                       f"python={platform.python_version()}",
@@ -245,7 +247,7 @@ jobs:
           DESKTOP
           cat > "${PKGROOT}/DEBIAN/control" <<CONTROL
           Package: ghosty-input
-          Version: ${VERSION}
+          Version: ${DEB_VERSION}
           Section: utils
           Priority: optional
           Architecture: amd64
@@ -267,8 +269,9 @@ jobs:
         run: |
           DEB="dist/ghosty-input_${VERSION}_amd64.deb"
           dpkg-deb --info "${DEB}"
-          test "$(dpkg-deb -f "${DEB}" Version)" = "${VERSION}"
+          test "$(dpkg-deb -f "${DEB}" Version)" = "${DEB_VERSION}"
           test -n "$(dpkg-deb -f "${DEB}" Depends)"
+          dpkg --compare-versions "${DEB_VERSION}" lt "0.6.0"
           rm -rf dist/deb-smoke
           mkdir -p dist/deb-smoke
           dpkg-deb -x "${DEB}" dist/deb-smoke
