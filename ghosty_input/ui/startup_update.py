@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox, QProgressDialog
 from ghosty_input.config import AppConfig
 from ghosty_input.core.logging_setup import get_logger
 from ghosty_input.core.update_manager import UpdateInfo, installation_kind, launch_installer
+from ghosty_input.core.update_state import mark_auto_check_attempt, should_auto_check
 from ghosty_input.ui.update_controller import UpdateController
 
 
@@ -48,7 +49,8 @@ def _wait_for_check(controller: UpdateController, channel: str) -> tuple[UpdateI
     loop.exec()
     controller.checked.disconnect(checked)
     controller.failed.disconnect(failed)
-    return result["info"], str(result["error"])  # type: ignore[return-value]
+    info = result["info"] if isinstance(result["info"], UpdateInfo) else None
+    return info, str(result["error"])
 
 
 def _wait_for_download(
@@ -84,11 +86,16 @@ def _wait_for_download(
     progress.close()
     controller.downloaded.disconnect(downloaded)
     controller.failed.disconnect(failed)
-    return result["path"], str(result["error"])  # type: ignore[return-value]
+    path = result["path"] if isinstance(result["path"], Path) else None
+    return path, str(result["error"])
 
 
 def maybe_run_startup_update(config: AppConfig) -> bool:
     """Offer a verified one-click update for packaged builds.
+
+    Automatic checks are rate-limited to avoid delaying repeated launches or
+    exhausting GitHub's unauthenticated public API allowance. Manual CLI update
+    checks always bypass this startup cooldown.
 
     Returns True when an installer/updater was launched and the current process
     should exit instead of opening the normal control center.
@@ -97,6 +104,13 @@ def maybe_run_startup_update(config: AppConfig) -> bool:
     kind = installation_kind()
     if not config.auto_check_updates or kind in {"source", "unsupported"}:
         return False
+    if not should_auto_check():
+        return False
+
+    try:
+        mark_auto_check_attempt()
+    except OSError as exc:
+        logger.warning("unable to persist update check timestamp: %s", exc)
 
     app = QApplication.instance() or QApplication([])
     controller = UpdateController(app)
