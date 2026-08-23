@@ -51,6 +51,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="override the saved update channel for --check-update or --update",
     )
     parser.add_argument(
+        "--set-update-channel",
+        choices=("auto", "stable", "alpha"),
+        help="save the automatic update channel and exit",
+    )
+    update_checks = parser.add_mutually_exclusive_group()
+    update_checks.add_argument(
+        "--enable-auto-update-check",
+        action="store_true",
+        help="enable packaged-build startup update checks and exit",
+    )
+    update_checks.add_argument(
+        "--disable-auto-update-check",
+        action="store_true",
+        help="disable packaged-build startup update checks and exit",
+    )
+    parser.add_argument(
         "--log-path",
         action="store_true",
         help="print the persistent alpha runtime log path and exit",
@@ -205,6 +221,31 @@ def _run_package_smoke_test() -> int:
     return 0
 
 
+def _handle_update_preferences(args: argparse.Namespace) -> bool:
+    if not any(
+        (
+            args.set_update_channel,
+            args.enable_auto_update_check,
+            args.disable_auto_update_check,
+        )
+    ):
+        return False
+
+    from ghosty_input.config import load_config, save_config
+
+    config = load_config()
+    if args.set_update_channel:
+        config.update_channel = args.set_update_channel
+    if args.enable_auto_update_check:
+        config.auto_check_updates = True
+    elif args.disable_auto_update_check:
+        config.auto_check_updates = False
+    save_config(config)
+    state = "enabled" if config.auto_check_updates else "disabled"
+    print(f"Automatic update checks: {state} · channel={config.update_channel}")
+    return True
+
+
 def _handle_update_command(args: argparse.Namespace) -> int | None:
     if not args.check_update and not args.update:
         return None
@@ -286,6 +327,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if report.ready else 2
 
     try:
+        if _handle_update_preferences(args):
+            return 0
+
         update_result = _handle_update_command(args)
         if update_result is not None:
             return update_result
