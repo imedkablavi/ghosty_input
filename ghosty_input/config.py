@@ -11,6 +11,7 @@ from typing import Any
 APP_NAME = "GhostyInput"
 INPUT_BACKENDS = {"auto", "uinput", "pyautogui"}
 ACTIVATION_MODES = {"pinch", "hover"}
+UPDATE_CHANNELS = {"auto", "stable", "alpha"}
 
 
 def app_data_dir() -> Path:
@@ -52,6 +53,9 @@ class AppConfig:
     screen_height: int = 0
     linux_close_to_tray: bool = False
     linux_start_minimized: bool = False
+
+    auto_check_updates: bool = True
+    update_channel: str = "auto"
 
     pointer_smoothing: float = 0.28
     pointer_deadzone_px: float = 1.5
@@ -105,6 +109,8 @@ class AppConfig:
             raise ValueError("Screen width and height must both be set or both be zero.")
         if self.screen_width and (self.screen_width < 640 or self.screen_height < 480):
             raise ValueError("Detected screen size is unexpectedly small.")
+        if self.update_channel not in UPDATE_CHANNELS:
+            raise ValueError("Update channel must be 'auto', 'stable', or 'alpha'.")
         if not 0.05 <= self.pointer_smoothing <= 0.95:
             raise ValueError("Pointer smoothing must be between 0.05 and 0.95.")
         if not 0.0 <= self.pointer_deadzone_px <= 20:
