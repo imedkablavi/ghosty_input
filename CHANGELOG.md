@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.6.0a1 - Alpha 1
+
+### Alpha readiness
+- Added `--preflight` with a structured PASS/WARN/FAIL readiness report.
+- Added optional real-camera validation with `--preflight --preflight-probe-camera`.
+- Added an **Alpha** tab to the Linux Control Center with readiness status, Camera Doctor, and runtime-log location.
+- Engine startup is blocked when required camera/input checks fail; desk-keyboard calibration can remain a warning while mouse testing proceeds.
+- Added single-instance desktop locking so two Ghosty Input processes cannot race for the same camera or uinput device.
+
+### Recovery and stability
+- Invalid `config.json` files are quarantined with a timestamped backup instead of being silently discarded.
+- Config writes are flushed, fsynced, permission-hardened on Unix, and atomically replaced.
+- Added a small rotating persistent runtime log for startup, shutdown, device/backend failures, and crash tracebacks.
+- Persistent logs intentionally exclude camera frames and typed content.
+- Runtime workers stop after repeated unexpected internal errors instead of producing an unbounded error loop.
+- Window shutdown no longer claims the engine is stopped while the camera worker is still alive.
+- Old absolute `pinch_threshold` configuration is intentionally discarded because it cannot be safely converted to the newer palm-normalized pinch ratio.
+
+### Linux distribution
+- Alpha version is consistent as `0.6.0a1` across Python metadata, Linux packages, Windows installer metadata, and artifact names.
+- Debian package now declares the Linux/X11/XCB runtime libraries required by the packaged Qt application.
+- Linux CI validates `libqxcb.so` with `ldd` and fails on unresolved shared libraries.
+- Source, packaged portable runtime, and extracted Debian payload validate `--preflight`, `--diagnose`, `--camera-diagnose`, `--log-path`, version output, and Qt offscreen startup.
+- Alpha testing instructions ship inside the portable and Debian packages as `README-ALPHA.md`.
+
+### Tests
+- Added coverage for config quarantine/recovery and legacy pinch migration.
+- Added Alpha preflight tests for missing cameras, Wayland/uinput readiness, dual-camera conflicts, calibration warnings, and real-stream probe failures.
+- Added duplicate-instance lock/reacquire tests.
+
 ## 0.5.1 - Linux camera reliability hotfix
 
 ### Camera discovery
@@ -18,8 +48,8 @@
 ### Diagnostics and packaging
 - Added `--camera-diagnose` (Camera Doctor) to report V4L2 capability, access, driver, bus, backend, negotiated resolution, FPS, and real-frame probe result.
 - Expanded `--diagnose` with capture/non-capture/unknown V4L2 counts and OpenCV video backends.
-- Linux source, packaged binary, and extracted `.deb` now run Camera Doctor as a packaging gate.
-- Linux packaging now uses a single release-version variable to keep archive, Debian metadata, and artifact names consistent.
+- Linux source, packaged binary, and extracted `.deb` run Camera Doctor as a packaging gate.
+- Linux packaging uses a single release-version variable to keep archive, Debian metadata, and artifact names consistent.
 
 ## 0.5.0 - Linux commercial track
 
@@ -43,10 +73,6 @@
 - Removed blanket `--collect-all PySide6` from the Linux build and rely on PyInstaller's Qt hooks to reduce package size while retaining explicit UI verification.
 - Added checksums and package-size reporting.
 - Improved the uinput setup helper with boot-time module loading, status, and removal commands.
-
-### Quality
-- Expanded unit coverage for persistent camera IDs and Linux desktop-entry generation.
-- 20 local unit tests pass before CI.
 
 ## 0.4.0 - Linux precision preview
 
