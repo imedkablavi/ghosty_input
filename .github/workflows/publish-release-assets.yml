@@ -15,6 +15,9 @@ jobs:
   publish:
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    concurrency:
+      group: ghosty-release-${{ github.event.workflow_run.head_sha }}
+      cancel-in-progress: false
     steps:
       - name: Checkout exact build commit
         uses: actions/checkout@v4
@@ -54,7 +57,7 @@ jobs:
           set -euo pipefail
           mkdir -p release-assets
           gh run download "${RUN_ID}" --repo "${GITHUB_REPOSITORY}" --dir release-assets
-          find release-assets -type f -maxdepth 3 -print
+          find release-assets -maxdepth 3 -type f -print
 
       - name: Create release if needed
         if: steps.release.outputs.publish == 'true'
@@ -79,7 +82,9 @@ jobs:
           if [[ "${PRERELEASE}" == "true" ]]; then
             args+=(--prerelease)
           fi
-          gh "${args[@]}"
+          if ! gh "${args[@]}"; then
+            gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null
+          fi
 
       - name: Upload release assets
         if: steps.release.outputs.publish == 'true'
