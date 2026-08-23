@@ -295,6 +295,25 @@ def _download_to(asset: ReleaseAsset, destination: Path, *, timeout: float) -> N
         raise UpdateError(f"Unable to download update: {exc.reason}") from exc
 
 
+def _normalize_archive_path(path: PurePosixPath) -> PurePosixPath:
+    if path.is_absolute():
+        raise UpdateError(f"Unsafe absolute path in update archive: {path}")
+    parts: list[str] = []
+    for part in path.parts:
+        if part in {"", "."}:
+            continue
+        if part == "..":
+            if not parts:
+                raise UpdateError(f"Archive path escapes package root: {path}")
+            parts.pop()
+        else:
+            parts.append(part)
+    normalized = PurePosixPath(*parts)
+    if not normalized.parts or normalized.parts[0] != "GhostyInput":
+        raise UpdateError(f"Archive path escapes GhostyInput root: {path}")
+    return normalized
+
+
 def _validate_portable_archive(package: Path) -> None:
     try:
         with tarfile.open(package, "r:gz") as archive:
@@ -302,17 +321,17 @@ def _validate_portable_archive(package: Path) -> None:
             if not members:
                 raise UpdateError("Portable update archive is empty.")
             for member in members:
-                path = PurePosixPath(member.name)
-                if path.is_absolute() or ".." in path.parts:
-                    raise UpdateError(f"Unsafe path in update archive: {member.name}")
-                if not path.parts or path.parts[0] != "GhostyInput":
-                    raise UpdateError("Portable archive has an unexpected root directory.")
+                member_path = _normalize_archive_path(PurePosixPath(member.name))
                 if member.ischr() or member.isblk() or member.isfifo():
                     raise UpdateError(f"Unsafe special file in update archive: {member.name}")
-                if member.issym() or member.islnk():
+                if member.issym():
                     link = PurePosixPath(member.linkname)
-                    if link.is_absolute() or ".." in link.parts:
-                        raise UpdateError(f"Unsafe link in update archive: {member.name}")
+                    if link.is_absolute():
+                        raise UpdateError(f"Unsafe absolute link in update archive: {member.name}")
+                    _normalize_archive_path(member_path.parent / link)
+                elif member.islnk():
+                    # tar hard-link targets are archive-root relative.
+                    _normalize_archive_path(PurePosixPath(member.linkname))
     except (tarfile.TarError, OSError) as exc:
         raise UpdateError(f"Unable to inspect portable update archive: {exc}") from exc
 
@@ -374,7 +393,8 @@ test -x "${new_root}/${binary_name}"
 rm -rf -- "$backup"
 mv -- "$target" "$backup"
 if mv -- "$new_root" "$target"; then
-  if "${target}/${binary_name}" >/dev/null 2>&1 & then
+  if GHOSTY_EXPECTED_VERSION="$version" "${target}/${binary_name}" --package-smoke-test >/dev/null 2>&1; then
+    "${target}/${binary_name}" >/dev/null 2>&1 &
     rm -rf -- "$backup"
     rm -f -- "$archive"
     exit 0
@@ -382,6 +402,7 @@ if mv -- "$new_root" "$target"; then
 fi
 rm -rf -- "$target"
 mv -- "$backup" "$target"
+"${target}/${binary_name}" >/dev/null 2>&1 &
 exit 1
 """
 
