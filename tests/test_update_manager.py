@@ -134,5 +134,31 @@ def test_portable_archive_rejects_path_traversal(tmp_path: Path):
         member = tarfile.TarInfo("GhostyInput/../../escape")
         member.size = len(payload)
         archive.addfile(member, io.BytesIO(payload))
-    with pytest.raises(UpdateError, match="Unsafe path"):
+    with pytest.raises(UpdateError, match="Archive path escapes"):
         update_manager._validate_portable_archive(archive_path)
+
+
+def test_portable_archive_allows_internal_relative_symlink(tmp_path: Path):
+    archive_path = tmp_path / "safe-update.tar.gz"
+    with tarfile.open(archive_path, "w:gz") as archive:
+        root = tarfile.TarInfo("GhostyInput")
+        root.type = tarfile.DIRTYPE
+        archive.addfile(root)
+        lib = tarfile.TarInfo("GhostyInput/lib/libreal.so")
+        payload = b"library"
+        lib.size = len(payload)
+        archive.addfile(lib, io.BytesIO(payload))
+        link = tarfile.TarInfo("GhostyInput/bin/libcurrent.so")
+        link.type = tarfile.SYMTYPE
+        link.linkname = "../lib/libreal.so"
+        archive.addfile(link)
+    update_manager._validate_portable_archive(archive_path)
+
+
+def test_portable_update_script_smoke_tests_before_deleting_backup():
+    script = update_manager._portable_update_script()
+    smoke = '--package-smoke-test'
+    assert smoke in script
+    assert 'GHOSTY_EXPECTED_VERSION="$version"' in script
+    assert script.index(smoke) < script.index('rm -rf -- "$backup"')
+    assert 'mv -- "$backup" "$target"' in script
