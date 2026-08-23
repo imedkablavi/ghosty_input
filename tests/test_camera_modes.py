@@ -45,6 +45,19 @@ class FakeCamera:
         self.released = True
 
 
+class UnknownFpsCamera(FakeCamera):
+    @property
+    def info(self) -> CameraInfo:
+        return CameraInfo(
+            self.index,
+            self.width,
+            self.height,
+            0.0,
+            "FAKE-UNKNOWN-FPS",
+            str(self.index),
+        )
+
+
 def _device(*, accessible=True, capture=True) -> CameraDevice:
     return CameraDevice(
         index=2,
@@ -74,6 +87,20 @@ def test_camera_mode_probe_distinguishes_exact_and_backend_fallback(monkeypatch)
     assert results[1].exact is False
     assert results[1].actual == "1920x1080@30.0"
     assert results[1].status == "backend negotiated fallback"
+
+
+def test_camera_mode_probe_never_claims_exact_when_fps_is_unknown(monkeypatch):
+    monkeypatch.setattr(camera_modes, "Camera", UnknownFpsCamera)
+
+    result = camera_modes.probe_camera_modes(
+        _device(),
+        candidates=((1280, 720, 30),),
+    )[0]
+
+    assert result.ok is True
+    assert result.exact is False
+    assert result.actual == "1280x720@unknown"
+    assert result.status == "resolution exact; FPS unavailable"
 
 
 def test_camera_mode_probe_rejects_non_capture_and_inaccessible_nodes():
