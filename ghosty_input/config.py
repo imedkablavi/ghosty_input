@@ -4,6 +4,7 @@ import json
 import os
 import platform
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -73,6 +74,8 @@ class AppConfig:
     calibration_points: list[list[float]] = field(default_factory=list)
 
     # Compatibility with v0.2 config files. New code uses pointer_smoothing.
+    # The old pinch_threshold was an absolute landmark distance and cannot be
+    # safely mapped to the new palm-normalized pinch ratio, so it is discarded.
     smoothing: float | None = None
     pinch_threshold: float | None = None
 
@@ -80,6 +83,8 @@ class AppConfig:
         if self.smoothing is not None:
             self.pointer_smoothing = float(self.smoothing)
             self.smoothing = None
+        if self.pinch_threshold is not None:
+            self.pinch_threshold = None
 
     def validate(self) -> None:
         if self.front_camera < 0 or self.top_camera < 0:
@@ -139,18 +144,49 @@ class AppConfig:
         return cfg
 
 
+@dataclass(frozen=True, slots=True)
+class ConfigLoadState:
+    config: AppConfig
+    recovered: bool = False
+    backup_path: Path | None = None
+    error: str = ""
+
+
 def config_path() -> Path:
     return app_data_dir() / "config.json"
 
 
-def load_config(path: Path | None = None) -> AppConfig:
+def _quarantine_invalid_config(target: Path) -> Path | None:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup = target.with_name(f"{target.stem}.invalid-{stamp}{target.suffix}")
+    try:
+        target.replace(backup)
+    except OSError:
+        return None
+    return backup
+
+
+def load_config_state(path: Path | None = None) -> ConfigLoadState:
     target = path or config_path()
     if not target.exists():
-        return AppConfig()
+        return ConfigLoadState(AppConfig())
     try:
-        return AppConfig.from_dict(json.loads(target.read_text(encoding="utf-8")))
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
-        return AppConfig()
+        payload = json.loads(target.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise TypeError("config root must be a JSON object")
+        return ConfigLoadState(AppConfig.from_dict(payload))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        backup = _quarantine_invalid_config(target)
+        return ConfigLoadState(
+            AppConfig(),
+            recovered=True,
+            backup_path=backup,
+            error=f"{type(exc).__name__}: {exc}",
+        )
+
+
+def load_config(path: Path | None = None) -> AppConfig:
+    return load_config_state(path).config
 
 
 def save_config(config: AppConfig, path: Path | None = None) -> None:
@@ -161,5 +197,14 @@ def save_config(config: AppConfig, path: Path | None = None) -> None:
     payload.pop("smoothing", None)
     payload.pop("pinch_threshold", None)
     temp = target.with_suffix(".tmp")
-    temp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    with temp.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    if platform.system() != "Windows":
+        try:
+            temp.chmod(0o600)
+        except OSError:
+            pass
     temp.replace(target)
