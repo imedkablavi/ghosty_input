@@ -115,7 +115,7 @@ jobs:
             }
           }
           $report += "TOTAL  $total bytes"
-          $report | Set-Content -Path "dist/BUILD-SIZES-Windows.txt" -Encoding ascii
+          $report | Set-Content -Path "dist/GhostyInput-Windows-SIZES.txt" -Encoding ascii
           if ($total -gt $maxTotal) {
             throw "Combined Windows artifacts exceed 800 MiB budget ($total bytes)."
           }
@@ -123,7 +123,7 @@ jobs:
       - name: Generate dependency manifest
         shell: pwsh
         run: |
-          python -m pip freeze | Sort-Object | Set-Content -Path "dist/DEPENDENCIES-Windows.txt" -Encoding ascii
+          python -m pip freeze | Sort-Object | Set-Content -Path "dist/DEPENDENCY-MANIFEST-Windows.txt" -Encoding ascii
 
       - name: Generate SHA-256 checksums
         shell: pwsh
@@ -147,5 +147,5 @@ jobs:
             dist/GhostyInput-Windows-x64-v${{ env.VERSION }}.zip
             dist/GhostyInputSetup.exe
             dist/SHA256SUMS-Windows.txt
-            dist/BUILD-SIZES-Windows.txt
-            dist/DEPENDENCIES-Windows.txt
+            dist/GhostyInput-Windows-SIZES.txt
+            dist/DEPENDENCY-MANIFEST-Windows.txt
