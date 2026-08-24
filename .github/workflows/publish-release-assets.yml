@@ -1,0 +1,107 @@
+name: Publish Release Assets
+
+on:
+  workflow_run:
+    workflows:
+      - Build Linux Distribution
+      - Build Windows Distribution
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ghosty-release-${{ github.event.workflow_run.head_sha }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout exact build commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+          tag="$(git tag --points-at "${HEAD_SHA}" | grep -E '^v[0-9]' | sort -V | tail -n 1 || true)"
+          if [[ -z "${tag}" ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "No v* tag points at ${HEAD_SHA}; this was not a release build."
+            exit 0
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          if [[ "${tag}" =~ (alpha|beta|rc|a[0-9]|b[0-9]) ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download successful build artifacts
+        if: steps.release.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          gh run download "${RUN_ID}" --repo "${GITHUB_REPOSITORY}" --dir release-assets
+          find release-assets -maxdepth 3 -type f -print
+
+      - name: Create release if needed
+        if: steps.release.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            exit 0
+          fi
+          args=(
+            release create "${TAG}"
+            --repo "${GITHUB_REPOSITORY}"
+            --target "${HEAD_SHA}"
+            --title "Ghosty Input ${TAG#v}"
+            --generate-notes
+          )
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          if ! gh "${args[@]}"; then
+            gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null
+          fi
+
+      - name: Upload release assets
+        if: steps.release.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          uploaded=0
+          while IFS= read -r -d '' file; do
+            case "$(basename -- "$file")" in
+              *.tar.gz|*.deb|*.zip|*.exe|SHA256SUMS-*.txt|BUILD-MANIFEST-*.txt|DEPENDENCY-MANIFEST-*.txt|*-SIZES.txt)
+                gh release upload "${TAG}" "$file" --repo "${GITHUB_REPOSITORY}" --clobber
+                uploaded=$((uploaded + 1))
+                ;;
+            esac
+          done < <(find release-assets -type f -print0)
+          test "${uploaded}" -gt 0
+          echo "Uploaded ${uploaded} release asset(s) from this build."

@@ -1,0 +1,346 @@
+name: Build Linux Distribution
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: ["main"]
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    env:
+      VERSION: "0.6.0a1"
+      DEB_VERSION: "0.6.0~a1"
+      SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Linux runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            desktop-file-utils \
+            libdbus-1-3 \
+            libegl1 \
+            libfontconfig1 \
+            libfreetype6 \
+            libgl1 \
+            libglib2.0-0 \
+            libice6 \
+            libsm6 \
+            libx11-6 \
+            libx11-xcb1 \
+            libxcb1 \
+            libxcb-cursor0 \
+            libxcb-glx0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-render0 \
+            libxcb-shape0 \
+            libxcb-shm0 \
+            libxcb-sync1 \
+            libxcb-util1 \
+            libxcb-xfixes0 \
+            libxcb-xinerama0 \
+            libxcb-xkb1 \
+            libxext6 \
+            libxfixes3 \
+            libxi6 \
+            libxkbcommon0 \
+            libxkbcommon-x11-0 \
+            libxrender1
+
+      - name: Install application and build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c constraints-release.txt -r requirements.txt pyinstaller
+          python -m pip check
+
+      - name: Validate release dependency resolution
+        run: |
+          python - <<'PY'
+          from importlib.metadata import PackageNotFoundError, version
+
+          expected = {
+              "mediapipe": "0.10.35",
+              "numpy": "2.4.6",
+              "opencv-contrib-python": "5.0.0.93",
+              "PyAutoGUI": "0.9.54",
+              "PySide6": "6.11.2",
+              "evdev": "1.9.3",
+              "pyinstaller": "6.22.2",
+          }
+          for package, wanted in expected.items():
+              actual = version(package)
+              if actual != wanted:
+                  raise SystemExit(f"{package}: expected {wanted}, got {actual}")
+
+          try:
+              version("opencv-python")
+          except PackageNotFoundError:
+              pass
+          else:
+              raise SystemExit(
+                  "opencv-python and opencv-contrib-python must not coexist in the release environment"
+              )
+          PY
+
+      - name: Validate source runtime
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python -m compileall -q ghosty_input tests
+          python run.py --version | grep -Fx "${VERSION}"
+          python run.py --diagnose
+          python run.py --camera-diagnose
+          python run.py --log-path
+          python run.py --ui-smoke-test
+          GHOSTY_EXPECTED_VERSION="${VERSION}" python run.py --package-smoke-test
+          set +e
+          python run.py --preflight > /tmp/ghosty-alpha-preflight.txt
+          preflight_code=$?
+          set -e
+          test "${preflight_code}" -eq 2
+          grep -F "ALPHA BLOCKED" /tmp/ghosty-alpha-preflight.txt
+
+      - name: Build Linux application
+        run: |
+          pyinstaller \
+            --noconfirm \
+            --clean \
+            --onedir \
+            --name GhostyInput \
+            --collect-all mediapipe \
+            --collect-all evdev \
+            --add-data "assets:assets" \
+            run.py
+
+      - name: Verify packaged runtime
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          ./dist/GhostyInput/GhostyInput --version | grep -Fx "${VERSION}"
+          ./dist/GhostyInput/GhostyInput --diagnose > dist/GhostyInput/BUILD-DIAGNOSTICS.txt
+          ./dist/GhostyInput/GhostyInput --camera-diagnose > dist/GhostyInput/CAMERA-DIAGNOSTICS.txt
+          ./dist/GhostyInput/GhostyInput --log-path
+          ./dist/GhostyInput/GhostyInput --ui-smoke-test
+          GHOSTY_EXPECTED_VERSION="${VERSION}" ./dist/GhostyInput/GhostyInput --package-smoke-test
+          set +e
+          ./dist/GhostyInput/GhostyInput --preflight > /tmp/ghosty-packaged-preflight.txt
+          preflight_code=$?
+          set -e
+          test "${preflight_code}" -eq 2
+          grep -F "ALPHA BLOCKED" /tmp/ghosty-packaged-preflight.txt
+
+      - name: Validate Qt XCB runtime linkage
+        run: |
+          QXCB=$(find dist/GhostyInput -type f -name libqxcb.so -print -quit)
+          test -n "${QXCB}"
+          echo "Qt xcb platform plugin: ${QXCB}"
+          ldd "${QXCB}" | tee dist/GhostyInput/QXCB-LDD.txt
+          if grep -F "not found" dist/GhostyInput/QXCB-LDD.txt; then
+            echo "A required Qt/XCB runtime library is missing."
+            exit 1
+          fi
+
+      - name: Add Linux helpers and manifests
+        run: |
+          cp scripts/ghosty-input-linux-setup.sh dist/GhostyInput/
+          cp docs/LINUX.md dist/GhostyInput/README-LINUX.md
+          cp docs/ALPHA.md dist/GhostyInput/README-ALPHA.md
+          cp LICENSE dist/GhostyInput/LICENSE
+          cp constraints-release.txt dist/GhostyInput/RELEASE-CONSTRAINTS.txt
+          cat > dist/GhostyInput/run-ghosty.sh <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+          exec "${HERE}/GhostyInput" "$@"
+          SH
+          chmod +x \
+            dist/GhostyInput/GhostyInput \
+            dist/GhostyInput/run-ghosty.sh \
+            dist/GhostyInput/ghosty-input-linux-setup.sh
+          python - <<'PY'
+          from importlib import metadata
+          from pathlib import Path
+          import os
+          import platform
+          import sys
+
+          root = Path("dist/GhostyInput")
+          packages = []
+          for dist in metadata.distributions():
+              name = dist.metadata.get("Name") or "unknown"
+              version = dist.version or "unknown"
+              license_value = (
+                  dist.metadata.get("License-Expression")
+                  or dist.metadata.get("License")
+                  or "unspecified"
+              )
+              packages.append((name, version, " ".join(license_value.split())))
+          packages.sort(key=lambda item: item[0].lower())
+
+          (root / "BUILD-MANIFEST.txt").write_text(
+              "\n".join(
+                  [
+                      "Ghosty Input Linux Alpha build manifest",
+                      f"release_version={os.environ.get('VERSION', 'unknown')}",
+                      f"debian_version={os.environ.get('DEB_VERSION', 'unknown')}",
+                      f"source_head_sha={os.environ.get('SOURCE_HEAD_SHA', 'unknown')}",
+                      f"checkout_sha={os.environ.get('GITHUB_SHA', 'unknown')}",
+                      f"python={platform.python_version()}",
+                      f"platform={platform.platform()}",
+                      f"architecture={platform.machine()}",
+                      f"executable_python={sys.executable}",
+                  ]
+              )
+              + "\n",
+              encoding="utf-8",
+          )
+          (root / "DEPENDENCY-MANIFEST.txt").write_text(
+              "Name\tVersion\tDeclared license metadata\n"
+              + "\n".join("\t".join(item) for item in packages)
+              + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Build portable archive
+        run: |
+          tar -C dist -czf "dist/GhostyInput-Linux-x86_64-v${VERSION}.tar.gz" GhostyInput
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from ghosty_input.core.update_manager import _validate_portable_archive
+
+          package = Path(f"dist/GhostyInput-Linux-x86_64-v{os.environ['VERSION']}.tar.gz")
+          _validate_portable_archive(package)
+          print(f"Portable self-update archive validation: ok · {package}")
+          PY
+
+      - name: Build Debian package
+        run: |
+          PKGROOT="dist/deb-root"
+          mkdir -p \
+            "${PKGROOT}/DEBIAN" \
+            "${PKGROOT}/opt/ghosty-input" \
+            "${PKGROOT}/usr/bin" \
+            "${PKGROOT}/usr/share/applications" \
+            "${PKGROOT}/usr/share/icons/hicolor/256x256/apps"
+          cp -a dist/GhostyInput/. "${PKGROOT}/opt/ghosty-input/"
+          ln -s /opt/ghosty-input/run-ghosty.sh "${PKGROOT}/usr/bin/ghosty-input"
+          cp assets/logo.png "${PKGROOT}/usr/share/icons/hicolor/256x256/apps/ghosty-input.png"
+          cat > "${PKGROOT}/usr/share/applications/ghosty-input.desktop" <<'DESKTOP'
+          [Desktop Entry]
+          Type=Application
+          Version=1.0
+          Name=Ghosty Input Alpha
+          Comment=Camera-based hand gesture mouse and desk keyboard
+          Exec=/opt/ghosty-input/run-ghosty.sh
+          Icon=ghosty-input
+          Terminal=false
+          Categories=Utility;Accessibility;
+          StartupNotify=true
+          DESKTOP
+          cat > "${PKGROOT}/DEBIAN/control" <<CONTROL
+          Package: ghosty-input
+          Version: ${DEB_VERSION}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Ghosty Input
+          Homepage: https://github.com/imedkablavi/ghosty_input
+          Depends: libdbus-1-3, libegl1, libfontconfig1, libfreetype6, libgl1, libglib2.0-0, libice6, libsm6, libx11-6, libx11-xcb1, libxcb1, libxcb-cursor0, libxcb-glx0, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-randr0, libxcb-render-util0, libxcb-render0, libxcb-shape0, libxcb-shm0, libxcb-sync1, libxcb-util1, libxcb-xfixes0, libxcb-xinerama0, libxcb-xkb1, libxext6, libxfixes3, libxi6, libxkbcommon0, libxkbcommon-x11-0, libxrender1
+          Description: Ghosty Input Alpha offline vision input controller
+           Linux Alpha build with V4L2 camera diagnostics, native uinput support,
+           preflight checks, and local computer vision processing.
+          CONTROL
+          desktop-file-validate "${PKGROOT}/usr/share/applications/ghosty-input.desktop"
+          dpkg-deb --root-owner-group --build \
+            "${PKGROOT}" \
+            "dist/ghosty-input_${VERSION}_amd64.deb"
+
+      - name: Verify Debian package
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          DEB="dist/ghosty-input_${VERSION}_amd64.deb"
+          dpkg-deb --info "${DEB}"
+          test "$(dpkg-deb -f "${DEB}" Version)" = "${DEB_VERSION}"
+          test -n "$(dpkg-deb -f "${DEB}" Depends)"
+          dpkg --compare-versions "${DEB_VERSION}" lt "0.6.0"
+          rm -rf dist/deb-smoke
+          mkdir -p dist/deb-smoke
+          dpkg-deb -x "${DEB}" dist/deb-smoke
+          test -x dist/deb-smoke/opt/ghosty-input/GhostyInput
+          test -x dist/deb-smoke/opt/ghosty-input/run-ghosty.sh
+          test -f dist/deb-smoke/opt/ghosty-input/README-ALPHA.md
+          test -L dist/deb-smoke/usr/bin/ghosty-input
+          test "$(readlink dist/deb-smoke/usr/bin/ghosty-input)" = "/opt/ghosty-input/run-ghosty.sh"
+          desktop-file-validate dist/deb-smoke/usr/share/applications/ghosty-input.desktop
+          dist/deb-smoke/opt/ghosty-input/GhostyInput --version | grep -Fx "${VERSION}"
+          dist/deb-smoke/opt/ghosty-input/GhostyInput --diagnose > /tmp/ghosty-deb-diagnostics.txt
+          dist/deb-smoke/opt/ghosty-input/GhostyInput --camera-diagnose > /tmp/ghosty-deb-camera-diagnostics.txt
+          dist/deb-smoke/opt/ghosty-input/GhostyInput --log-path
+          dist/deb-smoke/opt/ghosty-input/GhostyInput --ui-smoke-test
+          GHOSTY_EXPECTED_VERSION="${VERSION}" dist/deb-smoke/opt/ghosty-input/GhostyInput --package-smoke-test
+          set +e
+          dist/deb-smoke/opt/ghosty-input/GhostyInput --preflight > /tmp/ghosty-deb-preflight.txt
+          preflight_code=$?
+          set -e
+          test "${preflight_code}" -eq 2
+          grep -F "ALPHA BLOCKED" /tmp/ghosty-deb-preflight.txt
+
+      - name: Enforce Linux package size budget
+        run: |
+          PORTABLE="dist/GhostyInput-Linux-x86_64-v${VERSION}.tar.gz"
+          DEB="dist/ghosty-input_${VERSION}_amd64.deb"
+          portable_bytes=$(stat -c%s "${PORTABLE}")
+          deb_bytes=$(stat -c%s "${DEB}")
+          portable_limit=$((235 * 1024 * 1024))
+          deb_limit=$((185 * 1024 * 1024))
+          echo "Portable: ${portable_bytes} bytes (limit ${portable_limit})"
+          echo "Debian:   ${deb_bytes} bytes (limit ${deb_limit})"
+          test "${portable_bytes}" -le "${portable_limit}"
+          test "${deb_bytes}" -le "${deb_limit}"
+
+      - name: Generate checksums and size report
+        run: |
+          cp dist/GhostyInput/BUILD-MANIFEST.txt dist/BUILD-MANIFEST-Linux.txt
+          cp dist/GhostyInput/DEPENDENCY-MANIFEST.txt dist/DEPENDENCY-MANIFEST-Linux.txt
+          cd dist
+          sha256sum \
+            "GhostyInput-Linux-x86_64-v${VERSION}.tar.gz" \
+            "ghosty-input_${VERSION}_amd64.deb" \
+            > SHA256SUMS-Linux.txt
+          du -h \
+            "GhostyInput-Linux-x86_64-v${VERSION}.tar.gz" \
+            "ghosty-input_${VERSION}_amd64.deb" \
+            | tee LINUX-SIZES.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GhostyInput-Linux-v${{ env.VERSION }}
+          path: |
+            dist/GhostyInput-Linux-x86_64-v${{ env.VERSION }}.tar.gz
+            dist/ghosty-input_${{ env.VERSION }}_amd64.deb
+            dist/SHA256SUMS-Linux.txt
+            dist/LINUX-SIZES.txt
+            dist/BUILD-MANIFEST-Linux.txt
+            dist/DEPENDENCY-MANIFEST-Linux.txt
+          if-no-files-found: error
+          retention-days: 14

@@ -4,19 +4,30 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ghosty-input"
-version = "0.2.0"
-description = "Offline hand-gesture mouse control and desk-surface virtual keyboard."
+version = "0.6.0a1"
+description = "Offline precision hand-gesture mouse control and desk-surface virtual keyboard."
 readme = "README.md"
 requires-python = ">=3.10,<3.12"
 license = {text = "MIT"}
 authors = [{name = "iEmmAd / cybrex"}]
-keywords = ["computer-vision", "hand-tracking", "mediapipe", "virtual-mouse", "virtual-keyboard"]
+keywords = [
+  "computer-vision",
+  "hand-tracking",
+  "mediapipe",
+  "virtual-mouse",
+  "virtual-keyboard",
+  "accessibility",
+  "human-computer-interaction",
+  "linux",
+  "wayland",
+]
 dependencies = [
   "mediapipe>=0.10.14,<0.11",
   "numpy>=1.26,<3",
-  "opencv-python>=4.9,<5",
+  "opencv-contrib-python>=4.9,<6",
   "PyAutoGUI>=0.9.54,<1",
   "PySide6>=6.7,<7",
+  "evdev>=1.7,<2; sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]
