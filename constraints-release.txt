@@ -1,4 +1,4 @@
-# Reproducible application/runtime constraints for Ghosty Input v0.5 releases.
+# Reproducible application/runtime constraints for Ghosty Input 0.6 Alpha releases.
 # CI intentionally uses requirements-ci.txt separately to keep compatibility coverage broad.
 mediapipe==0.10.35
 numpy==2.4.6
