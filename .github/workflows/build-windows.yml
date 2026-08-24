@@ -50,6 +50,15 @@ jobs:
             throw "Expected Ghosty Input $env:VERSION, got $actual"
           }
 
+      - name: Validate source product smoke
+        shell: pwsh
+        run: |
+          $env:GHOSTY_EXPECTED_VERSION = $env:VERSION
+          python run.py --package-smoke-test
+          if ($LASTEXITCODE -ne 0) {
+            throw "Source product smoke failed with exit code $LASTEXITCODE."
+          }
+
       - name: Build portable application
         run: >
           pyinstaller
@@ -85,6 +94,37 @@ jobs:
         run: |
           Compress-Archive -Path "dist/GhostyInput/*" -DestinationPath "dist/GhostyInput-Windows-x64-v$env:VERSION.zip" -Force
 
+      - name: Enforce Windows package size budget
+        shell: pwsh
+        run: |
+          $targets = @(
+            "dist/GhostyInput-Windows-x64-v$env:VERSION.zip",
+            "dist/GhostyInputSetup.exe"
+          )
+          $maxEach = 600MB
+          $maxTotal = 800MB
+          $total = 0L
+          $report = @()
+          foreach ($target in $targets) {
+            if (-not (Test-Path $target)) { throw "Missing distribution artifact: $target" }
+            $size = (Get-Item $target).Length
+            $total += $size
+            $report += "$(Split-Path $target -Leaf)  $size bytes"
+            if ($size -gt $maxEach) {
+              throw "Artifact exceeds 600 MiB budget: $target ($size bytes)."
+            }
+          }
+          $report += "TOTAL  $total bytes"
+          $report | Set-Content -Path "dist/BUILD-SIZES-Windows.txt" -Encoding ascii
+          if ($total -gt $maxTotal) {
+            throw "Combined Windows artifacts exceed 800 MiB budget ($total bytes)."
+          }
+
+      - name: Generate dependency manifest
+        shell: pwsh
+        run: |
+          python -m pip freeze | Sort-Object | Set-Content -Path "dist/DEPENDENCIES-Windows.txt" -Encoding ascii
+
       - name: Generate SHA-256 checksums
         shell: pwsh
         run: |
@@ -107,3 +147,5 @@ jobs:
             dist/GhostyInput-Windows-x64-v${{ env.VERSION }}.zip
             dist/GhostyInputSetup.exe
             dist/SHA256SUMS-Windows.txt
+            dist/BUILD-SIZES-Windows.txt
+            dist/DEPENDENCIES-Windows.txt
