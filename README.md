@@ -130,7 +130,7 @@ Ghosty Input processes frames locally in memory and does not include analytics, 
 
 ## Author
 
-iEmmAd / cybrex - [@imedkablavi](https://github.com/imedkablavi)
+iEmmAd / cybrex — [@imedkablavi](https://github.com/imedkablavi)
 
 ## Support
 

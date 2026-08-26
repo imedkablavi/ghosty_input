@@ -1,6 +1,6 @@
 # Ghosty Input
 
-**El hareketleriyle fare kontrolü ve masa yüzeyinde sanal klavye - yerel ve çevrimdışı.**
+**El hareketleriyle fare kontrolü ve masa yüzeyinde sanal klavye — yerel ve çevrimdışı.**
 
 [English](README.md) · [العربية](README.ar.md)
 
